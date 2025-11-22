@@ -10,7 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
-        #chat-window { max-height: 70vh; overflow-y: auto; scroll-behavior: smooth; }
+        #chat-window { max-height: 75vh; overflow-y: auto; scroll-behavior: smooth; }
+        .chat-bubble { white-space: pre-wrap; }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
@@ -19,12 +20,18 @@
         <h1 class="text-3xl font-bold text-center text-indigo-700 mb-2">
             Narcotics Anonymous Sponsor
         </h1>
-        <p id="user-info" class="text-xs text-center text-gray-500 mb-4 truncate"></p>
+        <p id="user-info" class="text-xs text-center text-gray-500 mb-4">
+            Guidance from Sponsor Sam (Stateless Chat)
+        </p>
 
         <!-- Chat Window -->
         <div id="chat-window" class="flex-grow space-y-4 p-4 border border-gray-200 rounded-lg mb-4 bg-gray-50">
-            <!-- Messages will be injected here -->
-            <div id="loading-initial" class="text-center text-gray-400">Loading messages...</div>
+            <!-- Initial Welcome Message -->
+            <div class="flex justify-start">
+                <div class="chat-bubble max-w-[80%] p-3 rounded-xl shadow-sm bg-white border border-gray-200 text-gray-800 rounded-tl-none">
+                    Welcome! How can I help you work your program today?
+                </div>
+            </div>
         </div>
 
         <!-- Input Area -->
@@ -42,149 +49,28 @@
         <div id="status-message" class="mt-3 text-sm text-center text-red-500 hidden"></div>
     </div>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, doc, addDoc, setDoc, deleteDoc, 
-            onSnapshot, collection, query, orderBy, serverTimestamp, setLogLevel 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global variables provided by the environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let db, auth, userId = null;
-        let isSending = false;
-        let messageListenerCleanup = null;
-        setLogLevel('Debug'); // Enable Firestore Debug Logging
-
+    <!-- Core JavaScript Logic -->
+    <script>
         // DOM elements
         const chatWindow = document.getElementById('chat-window');
         const userInput = document.getElementById('user-input');
         const sendButton = document.getElementById('send-button');
-        const userInfo = document.getElementById('user-info');
         const statusMessage = document.getElementById('status-message');
-        const loadingInitial = document.getElementById('loading-initial');
 
-        // --- Core Firebase Initialization and Auth ---
-        async function initializeFirebase() {
-            try {
-                const app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
+        let isSending = false;
+        
+        // API Configuration: The key MUST be set to an empty string for the environment to inject the secure key.
+        const apiKey = ""; 
+        const TEXT_MODEL = "gemini-2.5-flash-preview-09-2025";
 
-                // 1. Sign In (using custom token if provided, otherwise anonymously)
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // 2. Set up Auth State Listener
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        userInfo.textContent = `User ID: ${userId}`;
-                        // 3. Start Firestore listener only after authentication is complete
-                        startMessageListener();
-                    } else {
-                        console.error("User is signed out or authentication failed.");
-                        statusMessage.textContent = "Authentication failed. Cannot load data.";
-                        statusMessage.classList.remove('hidden');
-                    }
-                });
-
-                sendButton.addEventListener('click', sendMessage);
-                userInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && !isSending) {
-                        sendMessage();
-                    }
-                });
-
-            } catch (error) {
-                console.error("Firebase initialization failed:", error);
-                statusMessage.textContent = `App Setup Error: ${error.message}`;
-                statusMessage.classList.remove('hidden');
-            }
-        }
-
-        // --- Firestore Real-time Listener ---
-        function startMessageListener() {
-            if (messageListenerCleanup) messageListenerCleanup();
-
-            const messagesCollectionPath = `artifacts/${appId}/users/${userId}/messages`;
-            const q = query(collection(db, messagesCollectionPath), orderBy('timestamp', 'asc'));
-
-            messageListenerCleanup = onSnapshot(q, (snapshot) => {
-                loadingInitial.remove();
-                if (snapshot.empty && chatWindow.children.length === 0) {
-                     chatWindow.innerHTML = '<div class="text-center text-gray-500 p-4">Welcome! How can I help you work your program today?</div>';
-                     return;
-                }
-
-                const fragment = document.createDocumentFragment();
-                let hasNewMessage = false;
-
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === "added" || change.type === "modified") { // Handle modification for placeholder replacement
-                        const message = change.doc.data();
-                        const docId = change.doc.id;
-                        const isUser = message.userId === userId;
-
-                        let messageElement = document.getElementById(`msg-${docId}`);
-                        
-                        if (change.type === "added" && messageElement) return; 
-
-                        if (messageElement) {
-                            // If modified, update existing element content
-                            const bubble = messageElement.querySelector('.chat-bubble');
-                            if (bubble) {
-                                if (!isUser && message.content === "...") {
-                                    bubble.innerHTML = `<span class="animate-pulse">... Thinking ...</span>`;
-                                } else {
-                                    bubble.textContent = message.content;
-                                }
-                                hasNewMessage = true; 
-                            }
-                        } else if (change.type === "added") {
-                            // If added, create new element
-                            messageElement = createMessageElement(message.content, isUser, docId);
-                            fragment.appendChild(messageElement);
-                            hasNewMessage = true;
-                        }
-                    }
-                    if (change.type === "removed") {
-                        const messageElement = document.getElementById(`msg-${change.doc.id}`);
-                        if (messageElement) messageElement.remove();
-                    }
-                });
-
-                if (fragment.children.length > 0) {
-                    chatWindow.appendChild(fragment);
-                }
-
-                // Scroll to the bottom if there was a new message/modification
-                if (hasNewMessage) {
-                    chatWindow.scrollTop = chatWindow.scrollHeight;
-                }
-            }, (error) => {
-                console.error("Error listening to messages:", error);
-                statusMessage.textContent = `Database Error: ${error.message}`;
-                statusMessage.classList.remove('hidden');
-            });
-        }
 
         // --- UI Rendering ---
-        function createMessageElement(content, isUser, docId) {
+        function createMessageElement(content, isUser) {
             const wrapper = document.createElement('div');
-            wrapper.id = `msg-${docId}`;
             wrapper.className = isUser ? 'flex justify-end' : 'flex justify-start';
 
             const bubble = document.createElement('div');
-            bubble.classList.add('chat-bubble', 'max-w-[80%]', 'p-3', 'rounded-xl', 'shadow-sm', 'whitespace-pre-wrap');
+            bubble.classList.add('chat-bubble', 'max-w-[80%]', 'p-3', 'rounded-xl', 'shadow-sm');
             
             if (isUser) {
                 bubble.classList.add('bg-indigo-600', 'text-white', 'rounded-br-none');
@@ -192,15 +78,12 @@
                 bubble.classList.add('bg-white', 'border', 'border-gray-200', 'text-gray-800', 'rounded-tl-none');
             }
 
-            // Simple loading indicator for the AI response
-            if (!isUser && content === "...") {
-                bubble.innerHTML = `<span class="animate-pulse">... Thinking ...</span>`;
-            } else {
-                bubble.textContent = content;
-            }
-
+            bubble.textContent = content;
             wrapper.appendChild(bubble);
-            return wrapper;
+            
+            chatWindow.appendChild(wrapper);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            return bubble; // Return the bubble element for easy updating
         }
 
         function toggleLoading(loading) {
@@ -210,96 +93,78 @@
             sendButton.textContent = loading ? 'Sending...' : 'Send';
         }
 
+        // --- LLM API Call with Exponential Backoff ---
+        async function fetchWithBackoff(url, options, maxRetries = 5) {
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) {
+                        return response;
+                    } else if (response.status === 429 || response.status >= 500) {
+                        // Retry on rate limit (429) or server errors (5xx)
+                        const delay = Math.pow(2, attempt) * 1000 + (Math.random() * 1000);
+                        console.warn(`API call failed (Status: ${response.status}). Retrying in ${Math.round(delay / 1000)}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        // Do not retry on client errors (4xx)
+                        const errorText = await response.text();
+                        // This will catch the 403 error and throw it immediately
+                        throw new Error(`API Error ${response.status}: ${errorText}`);
+                    }
+                } catch (error) {
+                    if (attempt === maxRetries - 1) {
+                        throw error; // Re-throw the error after max retries
+                    }
+                    // Continue to next loop iteration for retry
+                }
+            }
+        }
+        
         // --- Chat Logic ---
         async function sendMessage() {
             const content = userInput.value.trim();
-            if (!content || isSending || !userId) return;
+            if (!content || isSending) return;
 
             toggleLoading(true);
             userInput.value = '';
+            statusMessage.classList.add('hidden'); // Clear previous status
 
-            const messagesCollectionPath = `artifacts/${appId}/users/${userId}/messages`;
-            const docRef = collection(db, messagesCollectionPath);
+            // 1. Display user message
+            createMessageElement(content, true);
 
-            // 1. Save user message to Firestore
-            try {
-                await addDoc(docRef, {
-                    content: content,
-                    userId: userId,
-                    timestamp: serverTimestamp()
-                });
-            } catch (error) {
-                console.error("Error saving user message to Firestore:", error);
-                statusMessage.textContent = `Failed to save message: ${error.message}`;
-                statusMessage.classList.remove('hidden');
-                toggleLoading(false);
-                return;
-            }
+            // 2. Display AI 'thinking' placeholder
+            const aiBubble = createMessageElement("... Thinking ...", false);
+            aiBubble.innerHTML = `<span class="animate-pulse">... Thinking ...</span>`;
 
-            // 2. Add an immediate AI 'thinking' placeholder message to Firestore
-            let aiDocRef;
-            try {
-                 aiDocRef = await addDoc(docRef, {
-                    content: "...",
-                    userId: 'na_sponsor', // Distinct ID for the new persona
-                    timestamp: serverTimestamp()
-                });
-            } catch (error) {
-                console.error("Error adding AI placeholder:", error);
-                // Continue, as the main issue is getting the response
-            }
 
-            // 3. Call the Gemini API for the response
-            let aiResponseText;
+            // 3. Call the Gemini (Text) API
+            let aiResponseText = "Sorry, Sam couldn't connect. Please try again or reach out to a human sponsor.";
             try {
                 // *** SYSTEM PROMPT FOR NA SPONSOR - USES NAME "SAM" ***
                 const systemPrompt = "You are an experienced Narcotics Anonymous (NA) Sponsor named Sam. Your purpose is to offer guidance, support, and advice to addicts in recovery, drawing exclusively from Narcotics Anonymous (NA) literature, including the Basic Text (It Works: How and Why), the NA Step Working Guide, and the Sponsorship Pathway to Daily Living (SPAD Daily Meditation). Respond with empathy, firmness, and wisdom, always grounding your advice in the Twelve Steps and Twelve Traditions of NA. Always speak from the perspective of a knowledgeable sponsor. Refer to yourself as Sam in your response. Never use generic names or placeholders in your response, instead refer to the user with a generic pronoun or 'my friend'.";
                 
                 const userQuery = content;
-                // MANDATORY: The key MUST be set to an empty string for the environment to inject the secure key.
-                const apiKey = "";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODEL}:generateContent?key=${apiKey}`;
 
                 const payload = {
                     contents: [{ parts: [{ text: userQuery }] }],
                     systemInstruction: { parts: [{ text: systemPrompt }] },
                 };
 
-                const response = await fetch(apiUrl, { // Using simple fetch now
+                const response = await fetchWithBackoff(textApiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`API Error ${response.status}: ${errorText}`);
-                }
 
                 const result = await response.json();
-                aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't generate a response. Keep coming back!";
+                aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text || aiResponseText;
                 
-                // 4. Update the AI placeholder message with the real response
-                if (aiDocRef) {
-                    const aiUpdateRef = doc(db, messagesCollectionPath, aiDocRef.id);
-                    setLogLevel('Silent'); 
-                    await setDoc(aiUpdateRef, {
-                        content: aiResponseText,
-                        timestamp: serverTimestamp() 
-                    }, { merge: true });
-                    setLogLevel('Debug'); 
-                } else {
-                    await addDoc(docRef, {
-                        content: aiResponseText,
-                        userId: 'na_sponsor',
-                        timestamp: serverTimestamp()
-                    });
-                }
-                
-                statusMessage.classList.add('hidden');
+                // 4. Update the placeholder with the final text response
+                aiBubble.textContent = aiResponseText;
 
             } catch (error) {
-                console.error("Gemini API call failed:", error);
+                console.error("Gemini operation failed:", error);
                 
                 // Check for the specific 403 error message
                 let errorDisplayMessage = `AI Connection Failed. The network may be slow or the request timed out. Please try again.`;
@@ -307,34 +172,29 @@
                      errorDisplayMessage = `AI Key Error: The required API key was not injected by the system. The code is correct, but the execution environment failed to provide the necessary key.`;
                      console.error(errorDisplayMessage);
                 }
-
-                statusMessage.textContent = errorDisplayMessage;
+                
+                aiBubble.textContent = `[Error: ${errorDisplayMessage}]`;
+                statusMessage.textContent = `Error: ${error.message}`;
                 statusMessage.classList.remove('hidden');
-
-                // *** ROBUST FIX: Clean up the unresolved placeholder message ***
-                if (aiDocRef) {
-                    const aiRef = doc(db, messagesCollectionPath, aiDocRef.id);
-                    try {
-                        await deleteDoc(aiRef);
-                        console.log("Successfully deleted lingering placeholder message.");
-                    } catch (deleteError) {
-                        console.error("Failed to delete placeholder. Attempting to update it with an error message.", deleteError);
-                        setLogLevel('Silent'); 
-                        await setDoc(aiRef, {
-                            content: `Error: ${errorDisplayMessage}`,
-                            timestamp: serverTimestamp(),
-                            error: true 
-                        }, { merge: true }).catch(e => console.error("Failed to set error content:", e));
-                        setLogLevel('Debug');
-                    }
-                }
             } finally {
                 toggleLoading(false);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
             }
         }
 
-        // --- Start Application ---
-        initializeFirebase();
+        // --- Initialize Event Listeners ---
+        function initializeApp() {
+            sendButton.addEventListener('click', sendMessage);
+            userInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !isSending) {
+                    sendMessage();
+                }
+            });
+            // Initial focus
+            userInput.focus();
+        }
+
+        initializeApp();
 
     </script>
 </body>
