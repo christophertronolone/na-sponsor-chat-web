@@ -136,7 +136,7 @@
 
                         let messageElement = document.getElementById(`msg-${docId}`);
                         
-                        if (change.type === "added" && messageElement) return; // Prevent duplicates on initial load if element already exists
+                        if (change.type === "added" && messageElement) return; 
 
                         if (messageElement) {
                             // If modified, update existing element content
@@ -147,7 +147,7 @@
                                 } else {
                                     bubble.textContent = message.content;
                                 }
-                                hasNewMessage = true; // Still scroll if modification happened
+                                hasNewMessage = true; 
                             }
                         } else if (change.type === "added") {
                             // If added, create new element
@@ -210,34 +210,7 @@
             sendButton.textContent = loading ? 'Sending...' : 'Send';
         }
 
-        // --- LLM API Call with Exponential Backoff ---
-        async function fetchWithBackoff(url, options, maxRetries = 5) {
-            for (let attempt = 0; attempt < maxRetries; attempt++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (response.ok) {
-                        return response;
-                    } else if (response.status === 429 || response.status >= 500) {
-                        // Retry on rate limit (429) or server errors (5xx)
-                        const delay = Math.pow(2, attempt) * 1000 + (Math.random() * 1000);
-                        console.warn(`API call failed (Status: ${response.status}). Retrying in ${Math.round(delay / 1000)}s...`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    } else {
-                        // Do not retry on client errors (4xx)
-                        const errorText = await response.text();
-                        throw new Error(`API Error ${response.status}: ${errorText}`);
-                    }
-                } catch (error) {
-                    if (attempt === maxRetries - 1) {
-                        throw error; // Re-throw the error after max retries
-                    }
-                    // Continue to next loop iteration for retry
-                }
-            }
-        }
-
         // --- Chat Logic ---
-
         async function sendMessage() {
             const content = userInput.value.trim();
             if (!content || isSending || !userId) return;
@@ -276,7 +249,7 @@
                 // Continue, as the main issue is getting the response
             }
 
-            // 3. Call the Gemini API for the response (without search grounding for speed)
+            // 3. Call the Gemini API for the response
             let aiResponseText;
             try {
                 // *** SYSTEM PROMPT FOR NA SPONSOR - USES NAME "SAM" ***
@@ -289,33 +262,33 @@
 
                 const payload = {
                     contents: [{ parts: [{ text: userQuery }] }],
-                    // *** REMOVED SEARCH GROUNDING FOR SPEED ***
-                    // tools: [{ "google_search": {} }], 
                     systemInstruction: { parts: [{ text: systemPrompt }] },
                 };
 
-                const response = await fetchWithBackoff(apiUrl, {
+                const response = await fetch(apiUrl, { // Using simple fetch now
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API Error ${response.status}: ${errorText}`);
+                }
 
                 const result = await response.json();
                 aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't generate a response. Keep coming back!";
                 
-                // 4. If successful, update the AI placeholder message with the real response
+                // 4. Update the AI placeholder message with the real response
                 if (aiDocRef) {
                     const aiUpdateRef = doc(db, messagesCollectionPath, aiDocRef.id);
-                    // Temporarily silence logs to prevent possible listener interference during update
                     setLogLevel('Silent'); 
                     await setDoc(aiUpdateRef, {
                         content: aiResponseText,
                         timestamp: serverTimestamp() 
                     }, { merge: true });
-                    // Restore debug logging
                     setLogLevel('Debug'); 
                 } else {
-                    // If the placeholder failed to be created, just add the final message
                     await addDoc(docRef, {
                         content: aiResponseText,
                         userId: 'na_sponsor',
@@ -342,17 +315,15 @@
                 if (aiDocRef) {
                     const aiRef = doc(db, messagesCollectionPath, aiDocRef.id);
                     try {
-                        // 4a. Await the deletion to ensure it completes before finishing the function
                         await deleteDoc(aiRef);
                         console.log("Successfully deleted lingering placeholder message.");
                     } catch (deleteError) {
-                        // 4b. If deletion fails (e.g., permission issue), update the placeholder with an error message instead
                         console.error("Failed to delete placeholder. Attempting to update it with an error message.", deleteError);
                         setLogLevel('Silent'); 
                         await setDoc(aiRef, {
                             content: `Error: ${errorDisplayMessage}`,
                             timestamp: serverTimestamp(),
-                            error: true // Optional flag, but helpful for debugging
+                            error: true 
                         }, { merge: true }).catch(e => console.error("Failed to set error content:", e));
                         setLogLevel('Debug');
                     }
