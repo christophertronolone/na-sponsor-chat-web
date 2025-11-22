@@ -136,7 +136,10 @@
                 const systemPrompt = "You are an experienced Narcotics Anonymous (NA) Sponsor named Sam. Your purpose is to offer guidance, support, and advice to addicts in recovery, drawing exclusively from Narcotics Anonymous (NA) literature, including the Basic Text (It Works: How and Why), the NA Step Working Guide, and the Sponsorship Pathway to Daily Living (SPAD Daily Meditation). Respond with empathy, firmness, and wisdom, always grounding your advice in the Twelve Steps and Twelve Traditions of NA. Always speak from the perspective of a knowledgeable sponsor. Refer to yourself as Sam in your response. Never use generic names or placeholders in your response, instead refer to the user with a generic pronoun or 'my friend'.";
                 
                 const userQuery = content;
-                const apiKey = "";
+                // VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+                // *** IMPORTANT: PASTE YOUR GEMINI API KEY HERE (GET IT FROM GOOGLE AI STUDIO) ***
+                const apiKey = ""; 
+                // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
                 const payload = {
