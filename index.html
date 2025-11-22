@@ -21,7 +21,7 @@
             Narcotics Anonymous Sponsor
         </h1>
         <p id="user-info" class="text-xs text-center text-gray-500 mb-4">
-            Guidance from Sponsor Sam (No Chat History is saved on this public site)
+            Guidance from Sponsor Sam (Text Chat Only)
         </p>
 
         <!-- Chat Window -->
@@ -58,6 +58,11 @@
         const statusMessage = document.getElementById('status-message');
 
         let isSending = false;
+        
+        // API Configuration
+        const apiKey = ""; // Will be injected automatically by the environment
+        const TEXT_MODEL = "gemini-2.5-flash-preview-09-2025";
+
 
         // --- UI Rendering ---
         function createMessageElement(content, isUser) {
@@ -113,7 +118,7 @@
                 }
             }
         }
-
+        
         // --- Chat Logic ---
         async function sendMessage() {
             const content = userInput.value.trim();
@@ -121,6 +126,7 @@
 
             toggleLoading(true);
             userInput.value = '';
+            statusMessage.classList.add('hidden'); // Clear previous status
 
             // 1. Display user message
             createMessageElement(content, true);
@@ -130,40 +136,36 @@
             aiBubble.innerHTML = `<span class="animate-pulse">... Thinking ...</span>`;
 
 
-            // 3. Call the Gemini API
+            // 3. Call the Gemini (Text) API
+            let aiResponseText = "Sorry, Sam couldn't connect. Please try again or reach out to a human sponsor.";
             try {
                 // *** SYSTEM PROMPT FOR NA SPONSOR - USES NAME "SAM" ***
                 const systemPrompt = "You are an experienced Narcotics Anonymous (NA) Sponsor named Sam. Your purpose is to offer guidance, support, and advice to addicts in recovery, drawing exclusively from Narcotics Anonymous (NA) literature, including the Basic Text (It Works: How and Why), the NA Step Working Guide, and the Sponsorship Pathway to Daily Living (SPAD Daily Meditation). Respond with empathy, firmness, and wisdom, always grounding your advice in the Twelve Steps and Twelve Traditions of NA. Always speak from the perspective of a knowledgeable sponsor. Refer to yourself as Sam in your response. Never use generic names or placeholders in your response, instead refer to the user with a generic pronoun or 'my friend'.";
                 
                 const userQuery = content;
-                // VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
-                // *** IMPORTANT: PASTE YOUR GEMINI API KEY HERE (GET IT FROM GOOGLE AI STUDIO) ***
-                const apiKey = "AIzaSyAEaWbIRfmzlLYFICp61ElnO8ZBrlXEtz4"; 
-                // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODEL}:generateContent?key=${apiKey}`;
 
                 const payload = {
                     contents: [{ parts: [{ text: userQuery }] }],
                     systemInstruction: { parts: [{ text: systemPrompt }] },
                 };
 
-                const response = await fetchWithBackoff(apiUrl, {
+                const response = await fetchWithBackoff(textApiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
                 const result = await response.json();
-                const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, Sam couldn't connect. Please try again or reach out to a human sponsor.";
+                aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text || aiResponseText;
                 
-                // 4. Update the placeholder with the final response
+                // 4. Update the placeholder with the final text response
                 aiBubble.textContent = aiResponseText;
-                statusMessage.classList.add('hidden');
 
             } catch (error) {
-                console.error("Gemini API call failed:", error);
-                aiBubble.textContent = "Error: Failed to connect to Sponsor Sam. The network may be slow or the request timed out. Please try again.";
-                statusMessage.textContent = `AI Connection Failed. ${error.message}`;
+                console.error("Gemini operation failed:", error);
+                aiBubble.textContent = aiResponseText; // Show the text even if API fails
+                statusMessage.textContent = `Error: ${error.message}`;
                 statusMessage.classList.remove('hidden');
             } finally {
                 toggleLoading(false);
