@@ -336,9 +336,12 @@ const LiteratureSelector = () => {
             >
                 {literatureKeys.map((section, index) => (
                     <React.Fragment key={index}>
+                        {/* Disabled option for section header */}
                         <option value="" disabled className="font-bold bg-gray-100">{section.label}</option>
                         {section.keys.map(key => (
-                            <option key={key} value={key} className="text-gray-800">{key}</option>
+                            <option key={key} value={key} className="text-gray-800">
+                                {key}
+                            </option>
                         ))}
                     </React.Fragment>
                 ))}
@@ -471,9 +474,10 @@ const CheckinLog = ({ db, userId, isAuthReady, showAlert }) => {
                             <li key={entry.id} className="border-b border-gray-100 pb-3 last:border-b-0">
                                 <div className="flex justify-between items-start">
                                     <p className="text-sm text-gray-500 font-medium">
-                                        {new Date(entry.timestamp.seconds * 1000).toLocaleDateString()}
+                                        {/* Use .seconds property from Firestore Timestamp object */}
+                                        {entry.timestamp && new Date(entry.timestamp.seconds * 1000).toLocaleDateString()}
                                         {' - '}
-                                        {new Date(entry.timestamp.seconds * 1000).toLocaleTimeString()}
+                                        {entry.timestamp && new Date(entry.timestamp.seconds * 1000).toLocaleTimeString()}
                                     </p>
                                     <button 
                                         onClick={() => handleDeleteEntry(entry.id)}
