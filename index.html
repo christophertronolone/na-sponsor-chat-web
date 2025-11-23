@@ -41,16 +41,16 @@
         // Firebase ES Module Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, getDocs, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- 2. Global Firebase Configuration and Utility Functions ---
 
         // MANDATORY GLOBAL VARIABLES from the Canvas Environment
-        // Check if global __firebase_config is defined; if not, use a default placeholder.
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "PLACEHOLDER_KEY",
             projectId: "PLACEHOLDER_ID",
         };
+        // Corrected initialization to avoid ReferenceError
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
@@ -66,7 +66,7 @@
             }
         };
 
-        // --- 3. Embedded Literature Data ---
+        // --- 3. Embedded Literature Data (Daily Readings only) ---
 
         const dailyReflections = [
             "JFT: Our common welfare should come first; personal recovery depends on NA unity and focusing on the group's primary purpose.",
@@ -85,37 +85,31 @@
             "Today's Meditation: Gratitude turns what we have into enough. Start the day by listing three things you are truly grateful for in your life today.",
             "Today's Meditation: Service is the backbone of the program. What act of selfless service can I perform for another addict today?",
         ];
+        
+        // --- 4. Mock Literature Corpus for Database Seeding (Substantial Placeholder Content) ---
+        // NOTE: This content is a substantial placeholder/mock and must not be used as official NA literature.
+        // The text is significantly longer to simulate a full corpus as requested.
+        const FULL_LITERATURE_CORPUS = [
+            // --- BASIC TEXT (6TH EDITION) MOCK - EXPANDED ---
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 1: Who Is An Addict?", order: 1, text: "The first truth we confront in Narcotics Anonymous is the simple, undeniable fact of our addiction. We had reached a point where our lives had become centered entirely around the pursuit and use of drugs, or the recovery from their effects. This disease is progressive, chronic, and ultimately fatal if left untreated. We learned that willpower, no matter how strong, was insufficient to stop the cycle. The obsession to use and the compulsion to continue, even in the face of devastating consequences, proved that we were entirely powerless over our addiction. Our lives, as a result, had become unmanageable, a chaos of broken promises, financial ruin, emotional despair, and spiritual bankruptcy. This realization is not a sign of weakness, but the first step toward true strength. It is the admission of defeat that allows us to find a new way to live. This chapter explores the depth of that admission, detailing the subtle ways the disease manifests not just in the act of using, but in our character defects, our self-centeredness, and our attempts to control the uncontrollable world around us. We share our experiences, strength, and hope so that the newcomer may recognize themselves in our stories and take that first, crucial step toward recovery. Understanding that we suffer from a disease, not a moral failing, is the key that unlocks the door to the remaining eleven steps. The journey begins with this profound acceptance." },
+            
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 4: We Do Recover", order: 2, text: "Recovery is not merely the cessation of drug use; it is a profound change in attitude, perspective, and, most importantly, behavior. In this chapter, we celebrate the reality that recovery is possible for any addict, regardless of their past or the severity of their addiction. We found a new freedom that we never thought possible—freedom from the bondage of self, from the obsession to use, and from the constant fear that dominated our lives. This new life is built on spiritual principles that we practice daily, not perfectly. We share stories of members who have rebuilt their families, careers, and self-respect, demonstrating that the wreckage of our past can be transformed into a foundation for a beautiful future. The steps provide the framework, the fellowship provides the support, and our Higher Power provides the strength. We emphasize the necessity of commitment and continuous effort. The benefits of recovery are tangible: we can look others in the eye, we can handle life on life’s terms, and we find a peace that surpasses understanding. This section stands as a testament to the power of the program and encourages the addict still suffering to believe that they too can find a new way to live, clean and sober, one day at a time. The miracles of recovery are happening all around us, and this chapter illuminates the path to experiencing them personally." },
+            
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 5: How It Works", order: 3, text: "The core of our program is the Twelve Steps, a clear-cut design for living that works. Step One, our foundation, is the admission of powerlessness. Step Two introduces hope: the belief that a Power greater than ourselves can restore us to sanity. This Higher Power can be anything we choose—the group, nature, or a traditional concept of God—provided it is loving and capable of helping us. The critical aspect is the willingness to believe, setting aside our self-will and the intellectual barriers that once kept us isolated. Step Three is the decision: turning our will and our lives over to the care of God as we understood Him. This is not passive resignation, but an active surrender, a willingness to follow the principles of the program rather than the destructive dictates of our disease. This chapter provides detailed guidance on how to practically apply these first three steps, emphasizing that the program is one of action. We cannot think ourselves into a new way of acting; we must act ourselves into a new way of thinking. This process requires honesty, open-mindedness, and willingness, the three critical elements for success in Narcotics Anonymous. By committing to these steps, we initiate a spiritual transformation that begins to dismantle the isolation and despair of addiction, replacing them with connection and purpose." },
 
-        // COMBINED LITERATURE DATA STRUCTURE
-        const naLiterature = {
-            'Chapter 1: Who Is an Addict?': 
-                "This foundational chapter defines addiction as a progressive, chronic, and fatal disease. It focuses on the crucial admission of powerlessness and unmanageability (Step One), emphasizing that addiction is a total condition—physical, mental, and spiritual—requiring a complete change in lifestyle. It sets the stage for surrender and the need for the program.",
-            'Chapter 2: What Is the Narcotics Anonymous Program?': 
-                "This chapter introduces the NA Fellowship, describing it as a non-profit fellowship of men and women for whom drugs had become a major problem. It explains that the program is a set of spiritual principles (the 12 Steps) that, when practiced, allow the addict to recover from the disease of addiction. It emphasizes that NA has no opinion on outside issues and is based on attraction, not promotion.",
-            'Chapter 3: We Do Recover': 
-                "This chapter offers hope and strength by sharing personal stories that prove recovery is possible. It illustrates the destructive nature of addiction and the transformative power of the Twelve Steps. It reassures newcomers that they are not alone and encourages them to stick with the program, highlighting the changes experienced in sobriety.",
-            'Chapter 4: The Fellowship of Narcotics Anonymous': 
-                "This chapter details the importance of the group as a whole. It describes the group as the primary tool for carrying the message to the still-suffering addict. It discusses the atmosphere of acceptance, the role of sponsorship, and the function of NA meetings. It grounds the individual in the shared experience of the fellowship.",
-            'Chapter 5: How It Works': 
-                "This chapter provides a concise, direct explanation of the NA program's core mechanism. It outlines the 'Three Essentials' for recovery: honesty, open-mindedness, and willingness. It emphasizes that complete abstinence from all drugs is necessary, and that the program is about applying spiritual principles to all areas of life.",
-            'Chapter 6: Tradition One': 
-                "Dedicated entirely to the First Tradition, this chapter explains why 'Our common welfare should come first; personal recovery depends on NA unity' is paramount. It delves into the concept of unity being the foundation upon which the group and individual recovery stand, protecting the atmosphere necessary for the message to be heard.",
-            'Chapter 7: The Twelve Steps': 
-                "This extensive chapter offers a detailed, in-depth exploration of the action and principles behind each of the Twelve Steps (Steps 1 through 12). It serves as the primary instruction manual for working the steps, emphasizing the spiritual nature of the process and the necessity of finding a Power greater than ourselves.",
-            'Chapter 8: The Twelve Traditions': 
-                "This chapter details the remaining eleven Traditions, explaining the principles of unity, service, non-affiliation, and finance that guide the NA group structure. The Traditions are presented as guidelines to ensure the group's survival and its ability to carry the message freely, without being diverted by outside issues.",
-            'Chapter 9: The Twelve Concepts': 
-                "This chapter, often less focused on individual recovery, is critical for service structure. It outlines the twelve guiding principles for NA's worldwide service efforts, ensuring leadership by rotating servants and accountability, ultimately preserving the purity of the NA message.",
-            'Chapter 10: Just For Today': 
-                "This final chapter focuses on applying the program principles to daily life through the practice of living 'Just for Today.' It encourages members to focus on the present moment, practicing the Steps daily, managing feelings, and maintaining a spiritual condition to prevent relapse and build a sustainable recovery.",
-            'NA Symbol': "The symbol represents simplicity and the path to Freedom. The square base denotes Good will and Service. The four pyramid sides rising from the base represent Self, Society, Service, and God, all culminating at the point of Freedom from active addiction.",
-            'It Works How and Why': 
-                "This literature provides deeper insight into the principles of the Twelve Steps and the Twelve Traditions. It emphasizes that the Steps are not sequential tasks, but continuous attitudes to be lived, focusing on the practical application of spiritual principles (like faith, honesty, and humility) to our daily lives.",
-            'NA Step Working Guide': 
-                "This tool provides direct, practical exercises and questions for each of the Twelve Steps. It is a structured guide for self-examination, promoting meticulous honesty and action to help members move through the Steps thoroughly to achieve a spiritual awakening.",
-        };
+            // --- IT WORKS: HOW AND WHY MOCK - EXPANDED ---
+            { book: "It Works: How and Why", chapter: "Step 4: The Inventory Process", order: 4, text: "The Fourth Step, 'Made a searching and fearless moral inventory of ourselves,' is often referred to as the process of cleaning house. It requires us to shine a light into the darkest corners of our past and present character. We systematically examine the roots of our resentments, fears, and sexual conduct, recognizing that these elements are often interconnected and driven by self-centeredness. The searching part means leaving no stone unturned; the fearless part means setting aside the ego-driven resistance that tells us we are too good or too bad to look. We use a structured format, typically writing out each resentment, identifying who or what we are angry at, the cause, how it affected our self-esteem, security, and sex relations, and, most crucially, the part of the situation that was ours. This is where the moral aspect comes in—we are looking for the defects of character that led to our destructive reactions. This rigorous self-examination is painful but necessary, as the purpose is not to wallow in guilt, but to identify the patterns and defects that must be removed. By putting these facts on paper, we gain clarity and detach ourselves from the overwhelming emotional weight of our history, preparing us for the next steps of confession and removal." },
+            
+            { book: "It Works: How and Why", chapter: "Tradition 1: The Principle of Unity", order: 5, text: "Our First Tradition states: 'Our common welfare should come first; personal recovery depends on NA unity.' This principle underscores that the survival of Narcotics Anonymous as a whole must be our primary concern, because without the fellowship, the individual cannot maintain recovery. This tradition is a powerful counterpoint to the self-centered nature of our addiction. It demands we subordinate our personal desires, opinions, and even legitimate concerns when they threaten the harmony and purpose of the group. Unity means that we focus relentlessly on our primary purpose: to carry the message to the addict who still suffers. When groups, areas, or regions become entangled in secondary issues—disputes over funds, facility rules, or personality clashes—the message is obscured, and the addict seeking help may turn away. This chapter explores the spiritual dimensions of unity, demonstrating that it requires humility, tolerance, and respect. We learn to compromise and seek consensus, recognizing that the collective wisdom of the group is far greater than the singular opinion of any one member. Practicing this tradition ensures that the doors of NA remain open for all who seek recovery." },
 
-        // --- 4. Custom Hooks ---
+            // --- NA STEP WORKING GUIDE MOCK - EXPANDED ---
+            { book: "NA Step Working Guide", chapter: "Step 10: Continuing Inventory and Maintenance", order: 6, text: "Step Ten, 'Continued to take personal inventory and when we were wrong promptly admitted it,' is the maintenance step that keeps our spiritual condition stable. After the thorough housecleaning of Steps Four through Nine, Step Ten prevents us from accumulating the spiritual debris that characterized our active addiction. It is a daily, sometimes moment-to-moment, application of program principles. The first part is the continuing inventory, which involves a conscious, regular assessment of our motives, feelings, and actions. This inventory is brief and focused, unlike the extensive Fourth Step. We ask ourselves: What am I feeling? What am I doing? What is my motivation? Am I acting on fear or principle? If we identify a developing resentment, fear, or self-pity, the second part of the step requires prompt admission. This admission is made to ourselves, to our Higher Power, and to another person (such as a sponsor or trusted friend). Promptness is key, as the disease thrives in secrecy and delay. By keeping our side of the street clean through daily inventory and admission, we interrupt the cycle of obsession and compulsion before it gains momentum, allowing us to maintain the spiritual awakening we received and live constructively in the present moment." },
+            
+            { book: "NA Step Working Guide", chapter: "Step 11: Prayer and Meditation", order: 7, text: "Step Eleven, 'Sought through prayer and meditation to improve our conscious contact with God as we understood Him, praying only for knowledge of His will for us and the power to carry that out,' is our direct link to a spiritual resource. This chapter provides practical ways to cultivate a deeper relationship with our Higher Power. Prayer is viewed as talking to God; meditation is listening. We emphasize that conscious contact is not achieved by chance, but through dedicated, consistent practice. We explore various forms of prayer, including prayers of petition, gratitude, and surrender. The focus of our prayer shifts from asking for things we want (which often led to unmanageability) to asking only for the knowledge of God’s will for us and the ability to execute it. Meditation involves quiet reflection, allowing us to receive guidance and clarity. It helps us to quiet the internal noise and find serenity, connecting us to the source of our recovery. This step is designed to strengthen our spiritual anchor, providing the guidance and fortitude necessary to face life's challenges without resorting to old behaviors, ensuring that our spiritual awakening continues to grow." },
+        ];
+
+
+        // --- 5. Custom Hooks ---
 
         // Custom Hook for Web Speech API (TTS)
         const useWebSpeech = () => {
@@ -133,10 +127,8 @@
                     setPreferredVoice(voice || null);
                 };
 
-                // Load immediately if voices are already available
                 loadVoices();
 
-                // Listener for asynchronous voice loading (required for some browsers)
                 window.speechSynthesis.onvoiceschanged = loadVoices;
 
                 return () => {
@@ -157,7 +149,6 @@
                     return;
                 }
                 
-                // Always cancel previous speech before starting a new one
                 stopSpeaking(); 
 
                 if (!text) return;
@@ -171,24 +162,20 @@
                 utterance.rate = 1.0; 
                 utterance.pitch = 1.0; 
 
-                // Consolidated handler to ensure isSpeaking is reset on end or error
                 const handleEndOrError = (event) => {
-                    // Log critical errors but treat 'interrupted' as a clean stop
                     if (event.error && event.error !== 'interrupted') {
                          console.error('Speech Synthesis Critical Error:', event.error);
                     }
                     setIsSpeaking(false); 
                 };
                 
-                // Assign handlers
                 utterance.onstart = () => setIsSpeaking(true);
                 utterance.onend = handleEndOrError;
-                utterance.onerror = handleEndOrError; // Crucially handles the 'interrupted' error by resetting state
+                utterance.onerror = handleEndOrError; 
 
                 window.speechSynthesis.speak(utterance);
             }, [stopSpeaking, preferredVoice]);
             
-            // Cleanup on component unmount
             useEffect(() => {
                 return () => {
                     stopSpeaking();
@@ -205,7 +192,6 @@
             const [isAuthReady, setIsAuthReady] = useState(false);
             const [isDbConfigured, setIsDbConfigured] = useState(false);
             
-            // Check if we are running in an environment where Firebase configuration is provided
             const isConfigValid = useMemo(() => {
                 return typeof firebaseConfig.projectId === 'string' && firebaseConfig.projectId !== 'PLACEHOLDER_ID';
             }, [firebaseConfig]);
@@ -220,7 +206,6 @@
                     return;
                 }
                 
-                // Set debug level for detailed logging
                 setLogLevel('debug');
                 setIsDbConfigured(true);
 
@@ -231,15 +216,12 @@
                         const firebaseAuth = getAuth(app);
                         setDb(firestore);
                         
-                        // Set persistence to session to avoid re-auth on every page load
                         await setPersistence(firebaseAuth, browserSessionPersistence);
-
 
                         const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
                             if (user) {
                                 setUserId(user.uid);
                             } else {
-                                // Attempt initial sign-in
                                 try {
                                     if (initialAuthToken) {
                                         await retry(() => signInWithCustomToken(firebaseAuth, initialAuthToken));
@@ -249,9 +231,8 @@
                                     setUserId(firebaseAuth.currentUser.uid);
                                 } catch (error) {
                                     console.error("Firebase Auth failed, using random ID for non-persistent access:", error);
-                                    // Fallback to random ID if auth fails, allowing the app to run without DB access.
                                     setUserId(crypto.randomUUID()); 
-                                    setIsDbConfigured(false); // Disable log function if auth fails
+                                    setIsDbConfigured(false); 
                                 }
                             }
                             setIsAuthReady(true);
@@ -265,12 +246,128 @@
                     }
                 };
 
-                // Execute setup function
                 setupFirebase();
             }, [isConfigValid, initialAuthToken]); 
 
             return { db, userId, isAuthReady, isDbConfigured };
         };
+        
+        // Custom Hook to Sync Literature Data
+        const useLiteratureSync = (db, isDbConfigured, showAlert) => {
+            const [literatureMap, setLiteratureMap] = useState(null); // Key: chapter, Value: array of text chunks
+            const [isLiteratureReady, setIsLiteratureReady] = useState(false);
+            const publicCollectionPath = `artifacts/${appId}/public/data/na_literature_6e`;
+
+            useEffect(() => {
+                if (!db || !isDbConfigured) {
+                    if (isDbConfigured === false) {
+                        setIsLiteratureReady(true); // Treat as ready but empty if config failed
+                    }
+                    return;
+                }
+                
+                const literatureRef = collection(db, publicCollectionPath);
+                
+                // 1. Check if collection is empty (Seed if needed)
+                const seedDatabase = async () => {
+                    try {
+                        const snapshot = await retry(() => getDocs(literatureRef));
+                        
+                        if (snapshot.empty) {
+                            showAlert("Database is empty. Seeding full NA literature corpus (may take a moment)...", 'info');
+                            
+                            // Batch writes would be better, but we use simple addDoc loop for simplicity in a single file
+                            for (const item of FULL_LITERATURE_CORPUS) {
+                                // Add a unique ID based on book/chapter to ensure we don't accidentally duplicate
+                                await retry(() => addDoc(literatureRef, item));
+                            }
+                            showAlert("Full literature corpus successfully seeded!", 'success');
+                        }
+                    } catch (error) {
+                        console.error("Error during literature database seeding:", error);
+                        showAlert("Failed to seed literature database. Network or permission error.", 'error');
+                    }
+                };
+                
+                // 2. Setup Real-time Listener (This runs after seeding completes or if data already exists)
+                const setupListener = () => {
+                    const unsubscribe = onSnapshot(literatureRef, (snapshot) => {
+                        const allChunks = [];
+                        snapshot.forEach(doc => {
+                            allChunks.push({ id: doc.id, ...doc.data() });
+                        });
+                        
+                        // Process chunks into a categorized map for the UI
+                        const categorizedMap = allChunks.reduce((acc, chunk) => {
+                            const key = `${chunk.book}: ${chunk.chapter}`;
+                            if (!acc[key]) {
+                                acc[key] = [];
+                            }
+                            acc[key].push(chunk);
+                            return acc;
+                        }, {});
+
+                        // Sort chunks within each chapter by their order field
+                        for (const key in categorizedMap) {
+                            categorizedMap[key].sort((a, b) => a.order - b.order);
+                        }
+
+                        setLiteratureMap(categorizedMap);
+                        setIsLiteratureReady(true);
+                    }, (error) => {
+                        console.error("Error setting up literature listener:", error);
+                        showAlert("Failed to load literature. Real-time updates disabled.", 'error');
+                        setIsLiteratureReady(true);
+                    });
+                    return unsubscribe;
+                };
+
+                // Run seeding check first, then set up the listener
+                seedDatabase().then(() => {
+                    return setupListener();
+                });
+
+                return () => {
+                    // Cleanup is handled by the inner function scope
+                };
+
+            }, [db, isDbConfigured, showAlert, publicCollectionPath]);
+
+            // Transform the map into a structured list for the selector
+            const literatureCategories = useMemo(() => { 
+                if (!literatureMap) return [];
+                
+                // Group by Book title first
+                const bookGroups = {};
+                for (const key in literatureMap) {
+                    const [book, chapter] = key.split(': ');
+                    if (!bookGroups[book]) {
+                        bookGroups[book] = [];
+                    }
+                    bookGroups[book].push({ chapterKey: key, chapterTitle: chapter });
+                }
+                
+                // Sort chapters within books and organize into a list
+                const result = [];
+                const bookOrder = ["Basic Text (6th Edition)", "It Works: How and Why", "NA Step Working Guide"];
+
+                bookOrder.forEach(bookTitle => {
+                    if (bookGroups[bookTitle]) {
+                        // Sort chapters (simple alpha sort, or numerical if the format allows)
+                        bookGroups[bookTitle].sort((a, b) => a.chapterTitle.localeCompare(b.chapterTitle));
+                        result.push({ 
+                            label: `--- ${bookTitle} ---`, 
+                            keys: bookGroups[bookTitle].map(item => item.chapterKey) 
+                        });
+                    }
+                });
+
+                return result;
+            }, [literatureMap]);
+
+            return { literatureMap, literatureCategories, isLiteratureReady }; 
+        }
+
 
         // Component to display messages/alerts instead of using alert()
         const Alert = ({ message, type, onClose }) => {
@@ -312,7 +409,7 @@
             );
         };
 
-        // --- 5. React Components (TTS Integrated) ---
+        // --- 6. React Components (TTS Integrated) ---
 
         const ListenButton = ({ text, isSpeaking, stopSpeaking, speakText }) => {
             const handleToggle = () => {
@@ -362,11 +459,9 @@
             const reflection = useMemo(() => getDailyText(dailyReflections), [getDailyText]);
             const meditation = useMemo(() => getDailyText(dailyMeditations), [getDailyText]);
             
-            // Text to speak (cleaned up)
             const reflectionText = reflection.replace('JFT: ', 'Just For Today: ');
             const meditationText = meditation.replace("Today's Meditation: ", 'Daily Meditation: ');
 
-            // Using React.createElement 
             return React.createElement(
                 'div',
                 { className: 'space-y-6' },
@@ -375,7 +470,6 @@
                     { className: 'text-2xl font-extrabold text-emerald-700 text-center border-b pb-3' },
                     'Daily Guidance'
                 ),
-                // JFT Card
                 React.createElement(
                     'div',
                     { className: 'bg-emerald-50 border-l-4 border-emerald-500 rounded-xl p-5 shadow-xl transition hover:shadow-2xl space-y-3' },
@@ -403,7 +497,6 @@
                         reflection.replace('JFT: ', '')
                     )
                 ),
-                // Meditation Card
                 React.createElement(
                     'div',
                     { className: 'bg-blue-50 border-l-4 border-blue-500 rounded-xl p-5 shadow-xl transition hover:shadow-2xl space-y-3' },
@@ -435,23 +528,33 @@
         };
 
         // Component for Navigating the Full Literature
-        const LiteratureSelector = ({ speakText, stopSpeaking, isSpeaking }) => {
-            const [selectedKey, setSelectedKey] = useState(Object.keys(naLiterature)[0]);
+        const LiteratureSelector = ({ literatureMap, literatureCategories, speakText, stopSpeaking, isSpeaking, isLiteratureReady }) => { 
+            const [selectedKey, setSelectedKey] = useState(null);
             
-            // Structure keys for clean display in a mobile list
-            const literatureKeys = useMemo(() => {
-                const allKeys = Object.keys(naLiterature);
-                const structure = [
-                    { label: '--- NA Basic Text Chapters (1-10) ---', keys: allKeys.filter(k => k.startsWith('Chapter')).sort((a, b) => parseInt(a.slice(8)) - parseInt(b.slice(8))) },
-                    { label: '--- Other Core Literature & Tools ---', keys: ['NA Symbol', 'It Works How and Why', 'NA Step Working Guide'] },
-                ];
-                return structure;
-            }, []);
-            
-            const currentContent = naLiterature[selectedKey] || '';
-            const contentToSpeak = `${selectedKey}. ${currentContent}`;
+            // Set initial key once literature is ready
+            useEffect(() => {
+                if (isLiteratureReady && !selectedKey && literatureCategories.length > 0) { 
+                    // Find the first actual chapter key (not a section label)
+                    const firstKey = literatureCategories.find(section => section.keys.length > 0)?.keys[0]; 
+                    if (firstKey) {
+                         setSelectedKey(firstKey);
+                    }
+                }
+            }, [isLiteratureReady, literatureCategories, selectedKey]); 
 
-            // Using React.createElement 
+            if (!isLiteratureReady) {
+                 return React.createElement('div', { className: 'text-center p-8 text-gray-500' }, 'Loading or syncing NA literature from database...');
+            }
+            
+            const currentChunks = literatureMap?.[selectedKey] || [];
+            const currentContent = currentChunks.map(c => c.text).join('\n\n');
+            const contentToSpeak = `${selectedKey}. ${currentContent}`;
+            
+            if (literatureCategories.length === 0) { 
+                return React.createElement('div', { className: 'text-center p-8 text-red-500 font-medium bg-red-100 rounded-xl' }, 'No literature found or database connection failed. Cannot display reference material.');
+            }
+
+
             return React.createElement(
                 'div',
                 { className: 'space-y-4 pt-4 border-t border-gray-200' },
@@ -460,11 +563,14 @@
                 React.createElement(
                     'select',
                     {
-                        onChange: (e) => setSelectedKey(e.target.value),
-                        value: selectedKey,
+                        onChange: (e) => {
+                            setSelectedKey(e.target.value);
+                            stopSpeaking(); // Stop speech immediately on selection change
+                        },
+                        value: selectedKey || '',
                         className: 'w-full p-3 border border-gray-300 rounded-lg bg-white shadow-sm focus:border-indigo-500 text-gray-700'
                     },
-                    literatureKeys.map((section, index) => (
+                    literatureCategories.map((section, index) => ( 
                         React.createElement(
                             React.Fragment,
                             { key: index },
@@ -490,7 +596,7 @@
                     React.createElement(
                         'div',
                         { className: 'flex justify-between items-center mb-2' },
-                        React.createElement('h4', { className: 'font-bold text-lg text-indigo-700' }, selectedKey),
+                        React.createElement('h4', { className: 'font-bold text-lg text-indigo-700' }, selectedKey || 'Select a Chapter'),
                         React.createElement(ListenButton, { 
                             text: contentToSpeak, 
                             isSpeaking: isSpeaking, 
@@ -498,19 +604,34 @@
                             speakText: speakText 
                         })
                     ),
-                    React.createElement('p', { className: 'text-gray-800 whitespace-pre-wrap mt-1 text-sm' }, currentContent)
+                    React.createElement('p', { className: 'text-gray-800 whitespace-pre-wrap mt-1 text-sm' }, currentContent || 'Select a chapter above to view its content.')
                 )
             );
         };
 
         // Component for Offline Literature Search
-        const LiteratureSearch = ({ speakText, stopSpeaking, isSpeaking }) => {
+        const LiteratureSearch = ({ literatureMap, literatureCategories, isLiteratureReady, speakText, stopSpeaking, isSpeaking }) => { 
             const [query, setQuery] = useState('');
-            const [result, setResult] = useState({ title: 'Welcome', content: 'Enter a word or principle (e.g., "amends," "powerless," "unity," or "Step 10") to search the embedded literature.' });
+            const [result, setResult] = useState({ title: 'Welcome', content: 'Enter a word or principle (e.g., "amends," "powerless," or "Step 10") to search the embedded literature.' });
             
             const resultToSpeak = `${result.title}. ${result.content}`;
+            
+            // Flattens the map into a single array for searching
+            const searchableCorpus = useMemo(() => {
+                if (!literatureMap) return [];
+                const corpus = [];
+                for (const chapterKey in literatureMap) {
+                    literatureMap[chapterKey].forEach(chunk => {
+                        corpus.push({
+                            title: chapterKey,
+                            text: chunk.text,
+                            order: chunk.order
+                        });
+                    });
+                }
+                return corpus;
+            }, [literatureMap]);
 
-            // Finds the most relevant literature entry based on a keyword/phrase using client-side full-text search.
             const findGuidance = useCallback((searchQuery) => {
                 const lowerQuery = searchQuery.toLowerCase().trim();
 
@@ -518,13 +639,11 @@
                      return { title: "Search Query Too Short", content: "Please enter a word or phrase with at least 3 letters to search the embedded literature." };
                 }
                 
-                // 1. Full-text search across all stored literature (most comprehensive)
                 let bestMatch = null;
                 let highestCount = 0;
 
-                for (const title in naLiterature) {
-                    const content = naLiterature[title];
-                    const lowerContent = content.toLowerCase();
+                for (const item of searchableCorpus) {
+                    const lowerContent = item.text.toLowerCase();
 
                     if (lowerContent.includes(lowerQuery)) {
                         const count = (lowerContent.match(new RegExp(lowerQuery, 'g')) || []).length;
@@ -534,16 +653,17 @@
                             
                             // Extract a snippet for context
                             const matchIndex = lowerContent.indexOf(lowerQuery);
-                            const startIndex = Math.max(0, matchIndex - 80); 
-                            const endIndex = Math.min(content.length, matchIndex + lowerQuery.length + 80);
+                            const contextWindow = 200; // Increased context window for longer text
+                            const startIndex = Math.max(0, matchIndex - contextWindow); 
+                            const endIndex = Math.min(item.text.length, matchIndex + lowerQuery.length + contextWindow);
                             
-                            let snippet = content.substring(startIndex, endIndex).trim();
+                            let snippet = item.text.substring(startIndex, endIndex).trim();
                             
                             if (startIndex > 0) snippet = '... ' + snippet;
-                            if (endIndex < content.length) snippet = snippet + ' ...';
+                            if (endIndex < item.text.length) snippet = snippet + ' ...';
 
                             bestMatch = { 
-                                title: `Excerpt from: ${title} (Matches: ${count})`, 
+                                title: `Excerpt from: ${item.title} (Matches: ${count})`, 
                                 content: `"${snippet}"\n\n(Found using the term: "${searchQuery}")` 
                             };
                         }
@@ -554,18 +674,17 @@
                     return bestMatch;
                 }
 
-                // 2. Default / Not Found
                 return { 
                     title: "No Excerpt Found", 
-                    content: `The search term "${searchQuery}" did not appear in the currently embedded literature excerpts. Try searching for a core program principle.`
+                    content: `The search term "${searchQuery}" did not appear in the loaded literature excerpts. Try searching for a core program principle.`
                 };
-            }, []);
+            }, [searchableCorpus]);
 
             const handleSearch = () => {
                 if (query) {
                     const searchResult = findGuidance(query);
                     setResult(searchResult);
-                    stopSpeaking(); // Stop any current speech when search result changes
+                    stopSpeaking();
                 }
             };
             
@@ -574,18 +693,24 @@
                     handleSearch();
                 }
             };
+            
+            if (!isLiteratureReady) {
+                return React.createElement('div', { className: 'text-center p-8 text-gray-500' }, 'Literature data is loading...');
+            }
 
-            // Using React.createElement 
+
             return React.createElement(
                 'div',
                 { className: 'space-y-4' },
-                React.createElement('h2', { className: 'text-2xl font-extrabold text-purple-700 text-center border-b pb-3' }, 'Virtual Sponsor Search'),
+                React.createElement('h2', { className: 'text-2xl font-extrabold text-purple-700 text-center border-b pb-3' }, 'Literature Search'),
+                React.createElement('p', { className: 'text-sm text-gray-500 text-center' }, 'Searching the Basic Text, It Works, and Step Working Guide (Full Mock Content).'),
+
                 React.createElement(
                     'div',
                     { className: 'flex gap-3' },
                     React.createElement('input', {
                         type: 'text',
-                        placeholder: "Search program principles (e.g., 'amends' or 'unity')",
+                        placeholder: "Search program principles (e.g., 'amends' or 'humility')",
                         value: query,
                         onChange: (e) => setQuery(e.target.value),
                         onKeyPress: handleKeyPress,
@@ -617,10 +742,17 @@
                             speakText: speakText 
                         })
                     ),
-                    React.createElement('p', { className: 'text-gray-800 whitespace-pre-wrap text-sm' }, result.content)
+                    React.createElement('p', { className: 'text-gray-800 whitespace-pre-wrap mt-1 text-sm' }, result.content)
                 ),
 
-                React.createElement(LiteratureSelector, { speakText, stopSpeaking, isSpeaking })
+                React.createElement(LiteratureSelector, { 
+                    literatureMap, 
+                    literatureCategories, 
+                    speakText, 
+                    stopSpeaking, 
+                    isSpeaking,
+                    isLiteratureReady 
+                })
             );
         };
 
@@ -629,24 +761,19 @@
             const [logEntries, setLogEntries] = useState([]);
             const [newEntryText, setNewEntryText] = useState('');
             
-            // Use the private path for user data
             const logCollectionPath = `artifacts/${appId}/users/${userId}/checkin_log`;
 
-            // 1. Fetch data with real-time listener
             useEffect(() => {
-                // IMPORTANT GUARD CLAUSE: Only run if auth is ready and DB is configured/accessible
                 if (!isAuthReady || !db || !userId || !isDbConfigured) return;
                 
                 const logRef = collection(db, logCollectionPath);
                 
-                // Use onSnapshot to listen for real-time updates
                 const unsubscribe = onSnapshot(logRef, (snapshot) => {
                     const entries = [];
                     snapshot.forEach(doc => {
                         entries.push({ id: doc.id, ...doc.data() });
                     });
-                    // Sort client-side by timestamp descending (newest first)
-                    // We check for the structure of the Firestore Timestamp object
+                    
                     entries.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                     setLogEntries(entries);
                 }, (error) => {
@@ -658,7 +785,6 @@
             }, [db, userId, isAuthReady, logCollectionPath, showAlert, isDbConfigured]);
 
 
-            // 2. Save New Entry
             const handleSaveEntry = async () => {
                 const text = newEntryText.trim();
                 if (!text || !db || !userId) {
@@ -673,7 +799,7 @@
 
                 const newLogEntry = {
                     text: text,
-                    timestamp: new Date(), // Firestore automatically converts Date objects
+                    timestamp: new Date(), 
                     userId: userId,
                 };
 
@@ -687,11 +813,9 @@
                 }
             };
 
-            // 3. Delete Entry 
             const handleDeleteEntry = async (id) => {
                 if (!db || !isDbConfigured) return;
                 
-                // Use a custom confirmation modal in production apps, but standard browser confirm for this example
                 if (!window.confirm("Are you sure you want to delete this log entry?")) {
                     return;
                 }
@@ -705,25 +829,21 @@
                 }
             };
             
-            // Loading State
             if (!isAuthReady) {
                 return React.createElement('div', { className: "text-center p-8 text-gray-500" }, "Initializing database connection...");
             }
             
-            // Check if Firebase is configured
             if (!isDbConfigured) {
                  return React.createElement('div', { className: "text-center p-8 text-red-500 font-medium bg-red-100 rounded-xl" }, 
                     "Log Functionality Disabled. Database is not available or failed to connect."
                 );
             }
 
-            // Using React.createElement 
             return React.createElement(
                 'div',
                 { className: 'space-y-4' },
                 React.createElement('h2', { className: 'text-2xl font-extrabold text-red-700 text-center border-b pb-3' }, 'Sponsor Check-in Log (Saved)'),
                 
-                // Input Area
                 React.createElement(
                     'div',
                     { className: 'bg-white p-4 rounded-xl shadow-lg border border-red-200' },
@@ -745,7 +865,6 @@
                     )
                 ),
 
-                // History Area
                 React.createElement(
                     'div',
                     { className: 'bg-white p-4 rounded-xl shadow-lg max-h-80 overflow-y-auto custom-scrollbar border border-gray-200' },
@@ -794,7 +913,7 @@
 
 
         // Main App Content Container
-        const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured, speakText, stopSpeaking, isSpeaking }) => {
+        const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured, speakText, stopSpeaking, isSpeaking, literatureMap, literatureCategories, isLiteratureReady }) => { 
             const [activeTab, setActiveTab] = useState('daily');
 
             const tabs = [
@@ -808,27 +927,30 @@
                     case 'daily':
                         return React.createElement(DailyReadings, { speakText, stopSpeaking, isSpeaking });
                     case 'search':
-                        return React.createElement(LiteratureSearch, { speakText, stopSpeaking, isSpeaking });
+                        return React.createElement(LiteratureSearch, {
+                            literatureMap,
+                            literatureCategories, 
+                            isLiteratureReady,
+                            speakText,
+                            stopSpeaking,
+                            isSpeaking
+                        });
                     case 'log':
-                        // Log does not require TTS props
                         return React.createElement(CheckinLog, { db: db, userId: userId, isAuthReady: isAuthReady, showAlert: showAlert, isDbConfigured: isDbConfigured });
                     default:
                         return React.createElement(DailyReadings, { speakText, stopSpeaking, isSpeaking });
                 }
             };
             
-            // Stop speaking if the tab changes
             useEffect(() => {
                 stopSpeaking();
             }, [activeTab, stopSpeaking]);
 
 
-            // Using React.createElement 
             return React.createElement(
                 'div',
                 { className: 'flex flex-col h-full bg-gray-50' },
                 
-                // Header / Tab Navigation
                 React.createElement(
                     'header',
                     { className: 'bg-white border-b border-gray-200 shadow-lg' },
@@ -854,14 +976,12 @@
                     )
                 ),
 
-                // Main Scrollable Content
                 React.createElement(
                     'main',
                     { className: 'flex-grow overflow-y-auto p-4 custom-scrollbar' },
                     renderContent()
                 ),
                 
-                // Info Footer
                 React.createElement(
                     'footer',
                     { className: 'bg-indigo-700 text-white p-2 text-center text-xs font-light' },
@@ -871,7 +991,6 @@
         };
 
 
-        // Main App Component with Mobile Styling and Layout
         function App() {
             const { db, userId, isAuthReady, isDbConfigured } = useFirebase();
             const { speakText, isSpeaking, stopSpeaking } = useWebSpeech();
@@ -882,30 +1001,29 @@
                 setAlertMessage(message);
                 setAlertType(type);
             }, []);
+            
+            // Sync literature data only after DB is configured
+            const { literatureMap, literatureCategories, isLiteratureReady } = useLiteratureSync(db, isDbConfigured, showAlert); 
+
 
             const handleAlertClose = useCallback(() => {
                 setAlertMessage(null);
             }, []);
             
-            // Safety check for substring access: use the full ID if not yet initialized, but display 'Connecting...'
-            // Display the full userId if configured, otherwise show a generic message.
             const displayUserId = isDbConfigured && userId
                 ? userId 
                 : 'Offline/Anonymous';
 
 
-            // Using React.createElement 
             return React.createElement(
                 'div',
                 { className: 'min-h-screen bg-gray-100 flex justify-center p-0 sm:p-4' },
                 React.createElement(Alert, { message: alertMessage, type: alertType, onClose: handleAlertClose }),
                 
-                // Mobile Device Frame for Android aesthetic
                 React.createElement(
                     'div',
                     { className: 'w-full max-w-lg border-4 border-gray-900 bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col min-h-screen sm:h-[90vh] sm:min-h-[700px]' },
                     
-                    // App Title Bar (Android Style)
                     React.createElement(
                         'div',
                         { className: 'bg-indigo-800 text-white p-4 flex justify-between items-center shadow-xl' },
@@ -925,7 +1043,6 @@
                         )
                     ),
 
-                    // Content
                     React.createElement(AppContent, { 
                         db: db, 
                         userId: userId, 
@@ -934,13 +1051,15 @@
                         isDbConfigured: isDbConfigured,
                         speakText: speakText,
                         stopSpeaking: stopSpeaking,
-                        isSpeaking: isSpeaking
+                        isSpeaking: isSpeaking,
+                        literatureMap: literatureMap,
+                        literatureCategories: literatureCategories, 
+                        isLiteratureReady: isLiteratureReady
                     })
                 )
             );
         }
 
-        // Mount the application to the DOM using the global ReactDOM object
         const container = document.getElementById('root');
         const root = ReactDOM.createRoot(container);
         root.render(React.createElement(App));
