@@ -9,10 +9,7 @@
     <!-- Load Google Font Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- 
-        FIX: Load React and ReactDOM as GLOBAL variables using standard script tags.
-        This resolves the "does not provide an export named 'default'" error.
-    -->
+    <!-- Load React and ReactDOM as GLOBAL variables using standard script tags. -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
@@ -36,10 +33,6 @@
 
     <div id="root"></div>
 
-    <!-- 
-        This script remains type="module" to allow Firebase imports.
-        It now accesses React hooks from the global 'React' object.
-    -->
     <script type="module">
         // --- 1. React Hook Definitions (Accessed from global React object) ---
         // We extract hooks from the globally loaded React object
@@ -53,13 +46,10 @@
         // --- 2. Global Firebase Configuration and Utility Functions ---
 
         // MANDATORY GLOBAL VARIABLES from the Canvas Environment
+        // Check if global __firebase_config is defined; if not, use a default placeholder.
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
+            apiKey: "PLACEHOLDER_KEY",
+            projectId: "PLACEHOLDER_ID",
         };
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -125,47 +115,87 @@
                 "This tool provides direct, practical exercises and questions for each of the Twelve Steps. It is a structured guide for self-examination, promoting meticulous honesty and action to help members move through the Steps thoroughly to achieve a spiritual awakening.",
         };
 
-        // --- 4. React Components and Hooks ---
+        // --- 4. Custom Hooks ---
 
-        // Component to display messages/alerts instead of using alert()
-        const Alert = ({ message, type, onClose }) => {
-            if (!message) return null;
+        // Custom Hook for Web Speech API (TTS)
+        const useWebSpeech = () => {
+            const [isSpeaking, setIsSpeaking] = useState(false);
+            const [preferredVoice, setPreferredVoice] = useState(null);
 
-            const baseStyle = "p-3 text-sm rounded-lg fixed top-2 left-1/2 -translate-x-1/2 z-50 shadow-xl max-w-sm w-11/12 transition-all duration-300 transform";
-            let colorStyle = "";
-
-            switch (type) {
-                case 'success':
-                    colorStyle = "bg-green-100 text-green-800 border border-green-200";
-                    break;
-                case 'error':
-                    colorStyle = "bg-red-100 text-red-800 border border-red-200";
-                    break;
-                default:
-                    colorStyle = "bg-blue-100 text-blue-800 border border-blue-200";
-            }
-
+            // 1. Load voices once and on change
             useEffect(() => {
-                const timer = setTimeout(() => {
-                    onClose();
-                }, 4000); 
+                if (!window.speechSynthesis) return;
 
-                return () => clearTimeout(timer);
-            }, [message, onClose]);
+                const loadVoices = () => {
+                    const voices = window.speechSynthesis.getVoices();
+                    // Try to find a clear English voice (Google voices are often higher quality)
+                    const voice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.default));
+                    setPreferredVoice(voice || null);
+                };
 
-            // Using React.createElement (JSX was already converted in the previous step)
-            return React.createElement(
-                'div',
-                { className: `${baseStyle} ${colorStyle}`, role: 'alert' },
-                React.createElement(
-                    'span',
-                    { className: 'font-medium' },
-                    type.toUpperCase(),
-                    ': '
-                ),
-                ' ',
-                message
-            );
+                // Load immediately if voices are already available
+                loadVoices();
+
+                // Listener for asynchronous voice loading (required for some browsers)
+                window.speechSynthesis.onvoiceschanged = loadVoices;
+
+                return () => {
+                    window.speechSynthesis.onvoiceschanged = null;
+                };
+            }, []);
+
+            const stopSpeaking = useCallback(() => {
+                if (window.speechSynthesis && window.speechSynthesis.speaking) {
+                    window.speechSynthesis.cancel();
+                    setIsSpeaking(false);
+                }
+            }, []);
+
+            const speakText = useCallback((text) => {
+                if (!window.speechSynthesis) {
+                    console.error("Browser does not support Web Speech Synthesis API.");
+                    return;
+                }
+                
+                // Always cancel previous speech before starting a new one
+                stopSpeaking(); 
+
+                if (!text) return;
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                }
+                
+                utterance.rate = 1.0; 
+                utterance.pitch = 1.0; 
+
+                // Consolidated handler to ensure isSpeaking is reset on end or error
+                const handleEndOrError = (event) => {
+                    // Log critical errors but treat 'interrupted' as a clean stop
+                    if (event.error && event.error !== 'interrupted') {
+                         console.error('Speech Synthesis Critical Error:', event.error);
+                    }
+                    setIsSpeaking(false); 
+                };
+                
+                // Assign handlers
+                utterance.onstart = () => setIsSpeaking(true);
+                utterance.onend = handleEndOrError;
+                utterance.onerror = handleEndOrError; // Crucially handles the 'interrupted' error by resetting state
+
+                window.speechSynthesis.speak(utterance);
+            }, [stopSpeaking, preferredVoice]);
+            
+            // Cleanup on component unmount
+            useEffect(() => {
+                return () => {
+                    stopSpeaking();
+                };
+            }, [stopSpeaking]);
+
+            return { speakText, isSpeaking, stopSpeaking };
         };
 
         // Custom Hook for Firebase Initialization and Authentication
@@ -175,10 +205,15 @@
             const [isAuthReady, setIsAuthReady] = useState(false);
             const [isDbConfigured, setIsDbConfigured] = useState(false);
             
+            // Check if we are running in an environment where Firebase configuration is provided
+            const isConfigValid = useMemo(() => {
+                return typeof firebaseConfig.projectId === 'string' && firebaseConfig.projectId !== 'PLACEHOLDER_ID';
+            }, [firebaseConfig]);
+
+
             useEffect(() => {
                 
-                // Check for placeholder config
-                if (!firebaseConfig.projectId || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
+                if (!isConfigValid) {
                     console.warn("Firebase config is missing or using placeholder. Log functionality is disabled.");
                     setIsAuthReady(true);
                     setIsDbConfigured(false);
@@ -214,7 +249,9 @@
                                     setUserId(firebaseAuth.currentUser.uid);
                                 } catch (error) {
                                     console.error("Firebase Auth failed, using random ID for non-persistent access:", error);
+                                    // Fallback to random ID if auth fails, allowing the app to run without DB access.
                                     setUserId(crypto.randomUUID()); 
+                                    setIsDbConfigured(false); // Disable log function if auth fails
                                 }
                             }
                             setIsAuthReady(true);
@@ -224,18 +261,95 @@
                     } catch (e) {
                         console.error("Error initializing Firebase services:", e);
                         setIsAuthReady(true);
+                        setIsDbConfigured(false);
                     }
                 };
 
                 // Execute setup function
                 setupFirebase();
-            }, [initialAuthToken]); 
+            }, [isConfigValid, initialAuthToken]); 
 
             return { db, userId, isAuthReady, isDbConfigured };
         };
 
+        // Component to display messages/alerts instead of using alert()
+        const Alert = ({ message, type, onClose }) => {
+            if (!message) return null;
+
+            const baseStyle = "p-3 text-sm rounded-lg fixed top-2 left-1/2 -translate-x-1/2 z-50 shadow-xl max-w-sm w-11/12 transition-all duration-300 transform";
+            let colorStyle = "";
+
+            switch (type) {
+                case 'success':
+                    colorStyle = "bg-green-100 text-green-800 border border-green-200";
+                    break;
+                case 'error':
+                    colorStyle = "bg-red-100 text-red-800 border border-red-200";
+                    break;
+                default:
+                    colorStyle = "bg-blue-100 text-blue-800 border border-blue-200";
+            }
+
+            useEffect(() => {
+                const timer = setTimeout(() => {
+                    onClose();
+                }, 4000); 
+
+                return () => clearTimeout(timer);
+            }, [message, onClose]);
+
+            return React.createElement(
+                'div',
+                { className: `${baseStyle} ${colorStyle}`, role: 'alert' },
+                React.createElement(
+                    'span',
+                    { className: 'font-medium' },
+                    type.toUpperCase(),
+                    ': '
+                ),
+                ' ',
+                message
+            );
+        };
+
+        // --- 5. React Components (TTS Integrated) ---
+
+        const ListenButton = ({ text, isSpeaking, stopSpeaking, speakText }) => {
+            const handleToggle = () => {
+                if (isSpeaking) {
+                    stopSpeaking();
+                } else {
+                    speakText(text);
+                }
+            };
+
+            return React.createElement(
+                'button',
+                {
+                    onClick: handleToggle,
+                    className: `ml-auto flex items-center px-3 py-1 text-xs font-semibold rounded-full transition duration-150 ${
+                        isSpeaking
+                            ? 'bg-red-500 hover:bg-red-600 text-white shadow-md'
+                            : 'bg-indigo-200 hover:bg-indigo-300 text-indigo-800'
+                    }`
+                },
+                React.createElement('svg', { 
+                    className: `w-4 h-4 mr-1 ${isSpeaking ? 'animate-pulse' : ''}`, 
+                    fill: 'none', 
+                    stroke: 'currentColor', 
+                    viewBox: '0 0 24 24' 
+                },
+                    isSpeaking 
+                        ? React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z' }) // Stop icon
+                        : React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M15.536 8.464l-4.536 4.536L8.464 15.536a2 2 0 01-2.828-2.828l4.536-4.536L15.536 8.464z' }) // Listen icon (play/speaker)
+                ),
+                isSpeaking ? 'Stop' : 'Listen'
+            );
+        };
+
+
         // Component for Daily Readings
-        const DailyReadings = () => {
+        const DailyReadings = ({ speakText, stopSpeaking, isSpeaking }) => {
             const getDailyText = useCallback((dataArray) => {
                 const now = new Date();
                 const start = new Date(now.getFullYear(), 0, 0);
@@ -247,6 +361,10 @@
 
             const reflection = useMemo(() => getDailyText(dailyReflections), [getDailyText]);
             const meditation = useMemo(() => getDailyText(dailyMeditations), [getDailyText]);
+            
+            // Text to speak (cleaned up)
+            const reflectionText = reflection.replace('JFT: ', 'Just For Today: ');
+            const meditationText = meditation.replace("Today's Meditation: ", 'Daily Meditation: ');
 
             // Using React.createElement 
             return React.createElement(
@@ -260,14 +378,24 @@
                 // JFT Card
                 React.createElement(
                     'div',
-                    { className: 'bg-emerald-50 border-l-4 border-emerald-500 rounded-xl p-5 shadow-xl transition hover:shadow-2xl' },
+                    { className: 'bg-emerald-50 border-l-4 border-emerald-500 rounded-xl p-5 shadow-xl transition hover:shadow-2xl space-y-3' },
                     React.createElement(
-                        'p',
-                        { className: 'font-bold text-emerald-700 text-xl mb-2 flex items-center' },
-                        React.createElement('svg', { className: 'w-6 h-6 mr-2', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
-                            React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' })
+                        'div',
+                        { className: 'flex items-center justify-between' },
+                        React.createElement(
+                            'p',
+                            { className: 'font-bold text-emerald-700 text-xl flex items-center' },
+                            React.createElement('svg', { className: 'w-6 h-6 mr-2', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' })
+                            ),
+                            'Just For Today'
                         ),
-                        'Just For Today'
+                        React.createElement(ListenButton, { 
+                            text: reflectionText, 
+                            isSpeaking: isSpeaking, 
+                            stopSpeaking: stopSpeaking, 
+                            speakText: speakText 
+                        })
                     ),
                     React.createElement(
                         'p',
@@ -278,14 +406,24 @@
                 // Meditation Card
                 React.createElement(
                     'div',
-                    { className: 'bg-blue-50 border-l-4 border-blue-500 rounded-xl p-5 shadow-xl transition hover:shadow-2xl' },
+                    { className: 'bg-blue-50 border-l-4 border-blue-500 rounded-xl p-5 shadow-xl transition hover:shadow-2xl space-y-3' },
                     React.createElement(
-                        'p',
-                        { className: 'font-bold text-blue-700 text-xl mb-2 flex items-center' },
-                        React.createElement('svg', { className: 'w-6 h-6 mr-2', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
-                            React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M16 4v12l-4-2-4 2V4M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' })
+                        'div',
+                        { className: 'flex items-center justify-between' },
+                        React.createElement(
+                            'p',
+                            { className: 'font-bold text-blue-700 text-xl flex items-center' },
+                            React.createElement('svg', { className: 'w-6 h-6 mr-2', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M16 4v12l-4-2-4 2V4M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' })
+                            ),
+                            'Daily Meditation'
                         ),
-                        'Daily Meditation'
+                        React.createElement(ListenButton, { 
+                            text: meditationText, 
+                            isSpeaking: isSpeaking, 
+                            stopSpeaking: stopSpeaking, 
+                            speakText: speakText 
+                        })
                     ),
                     React.createElement(
                         'p',
@@ -297,7 +435,7 @@
         };
 
         // Component for Navigating the Full Literature
-        const LiteratureSelector = () => {
+        const LiteratureSelector = ({ speakText, stopSpeaking, isSpeaking }) => {
             const [selectedKey, setSelectedKey] = useState(Object.keys(naLiterature)[0]);
             
             // Structure keys for clean display in a mobile list
@@ -311,6 +449,7 @@
             }, []);
             
             const currentContent = naLiterature[selectedKey] || '';
+            const contentToSpeak = `${selectedKey}. ${currentContent}`;
 
             // Using React.createElement 
             return React.createElement(
@@ -348,16 +487,28 @@
                 React.createElement(
                     'div',
                     { className: 'p-4 bg-gray-50 rounded-xl border border-gray-200 max-h-96 overflow-y-auto custom-scrollbar' },
-                    React.createElement('h4', { className: 'font-bold text-lg mb-2 text-indigo-700' }, selectedKey),
+                    React.createElement(
+                        'div',
+                        { className: 'flex justify-between items-center mb-2' },
+                        React.createElement('h4', { className: 'font-bold text-lg text-indigo-700' }, selectedKey),
+                        React.createElement(ListenButton, { 
+                            text: contentToSpeak, 
+                            isSpeaking: isSpeaking, 
+                            stopSpeaking: stopSpeaking, 
+                            speakText: speakText 
+                        })
+                    ),
                     React.createElement('p', { className: 'text-gray-800 whitespace-pre-wrap mt-1 text-sm' }, currentContent)
                 )
             );
         };
 
         // Component for Offline Literature Search
-        const LiteratureSearch = () => {
+        const LiteratureSearch = ({ speakText, stopSpeaking, isSpeaking }) => {
             const [query, setQuery] = useState('');
             const [result, setResult] = useState({ title: 'Welcome', content: 'Enter a word or principle (e.g., "amends," "powerless," "unity," or "Step 10") to search the embedded literature.' });
+            
+            const resultToSpeak = `${result.title}. ${result.content}`;
 
             // Finds the most relevant literature entry based on a keyword/phrase using client-side full-text search.
             const findGuidance = useCallback((searchQuery) => {
@@ -414,6 +565,7 @@
                 if (query) {
                     const searchResult = findGuidance(query);
                     setResult(searchResult);
+                    stopSpeaking(); // Stop any current speech when search result changes
                 }
             };
             
@@ -453,12 +605,22 @@
                 
                 React.createElement(
                     'div',
-                    { className: 'p-4 bg-purple-50 rounded-xl border border-purple-200 min-h-[100px] overflow-y-auto max-h-64 shadow-inner' },
-                    React.createElement('h4', { className: 'font-bold text-lg mb-1 text-purple-700' }, result.title),
+                    { className: 'p-4 bg-purple-50 rounded-xl border border-purple-200 min-h-[100px] overflow-y-auto max-h-64 shadow-inner space-y-2' },
+                    React.createElement(
+                        'div',
+                        { className: 'flex justify-between items-center' },
+                        React.createElement('h4', { className: 'font-bold text-lg mb-1 text-purple-700' }, result.title),
+                        React.createElement(ListenButton, { 
+                            text: resultToSpeak, 
+                            isSpeaking: isSpeaking, 
+                            stopSpeaking: stopSpeaking, 
+                            speakText: speakText 
+                        })
+                    ),
                     React.createElement('p', { className: 'text-gray-800 whitespace-pre-wrap text-sm' }, result.content)
                 ),
 
-                React.createElement(LiteratureSelector, null)
+                React.createElement(LiteratureSelector, { speakText, stopSpeaking, isSpeaking })
             );
         };
 
@@ -472,8 +634,8 @@
 
             // 1. Fetch data with real-time listener
             useEffect(() => {
-                // Check for all required dependencies
-                if (!isAuthReady || !db || !userId) return;
+                // IMPORTANT GUARD CLAUSE: Only run if auth is ready and DB is configured/accessible
+                if (!isAuthReady || !db || !userId || !isDbConfigured) return;
                 
                 const logRef = collection(db, logCollectionPath);
                 
@@ -493,7 +655,7 @@
                 });
 
                 return () => unsubscribe();
-            }, [db, userId, isAuthReady, logCollectionPath, showAlert]);
+            }, [db, userId, isAuthReady, logCollectionPath, showAlert, isDbConfigured]);
 
 
             // 2. Save New Entry
@@ -504,6 +666,11 @@
                     return;
                 }
                 
+                if (!isDbConfigured) {
+                     showAlert("Log Functionality Disabled. Database is not available.", 'error');
+                    return;
+                }
+
                 const newLogEntry = {
                     text: text,
                     timestamp: new Date(), // Firestore automatically converts Date objects
@@ -522,7 +689,7 @@
 
             // 3. Delete Entry 
             const handleDeleteEntry = async (id) => {
-                if (!db) return;
+                if (!db || !isDbConfigured) return;
                 
                 // Use a custom confirmation modal in production apps, but standard browser confirm for this example
                 if (!window.confirm("Are you sure you want to delete this log entry?")) {
@@ -545,8 +712,8 @@
             
             // Check if Firebase is configured
             if (!isDbConfigured) {
-                 return React.createElement('div', { className: "text-center p-8 text-red-500 font-medium" }, 
-                    "Log Functionality Disabled. Please update the `firebaseConfig` object in the code to enable persistent storage."
+                 return React.createElement('div', { className: "text-center p-8 text-red-500 font-medium bg-red-100 rounded-xl" }, 
+                    "Log Functionality Disabled. Database is not available or failed to connect."
                 );
             }
 
@@ -627,7 +794,7 @@
 
 
         // Main App Content Container
-        const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured }) => {
+        const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured, speakText, stopSpeaking, isSpeaking }) => {
             const [activeTab, setActiveTab] = useState('daily');
 
             const tabs = [
@@ -639,15 +806,22 @@
             const renderContent = () => {
                 switch (activeTab) {
                     case 'daily':
-                        return React.createElement(DailyReadings, null);
+                        return React.createElement(DailyReadings, { speakText, stopSpeaking, isSpeaking });
                     case 'search':
-                        return React.createElement(LiteratureSearch, null);
+                        return React.createElement(LiteratureSearch, { speakText, stopSpeaking, isSpeaking });
                     case 'log':
+                        // Log does not require TTS props
                         return React.createElement(CheckinLog, { db: db, userId: userId, isAuthReady: isAuthReady, showAlert: showAlert, isDbConfigured: isDbConfigured });
                     default:
-                        return React.createElement(DailyReadings, null);
+                        return React.createElement(DailyReadings, { speakText, stopSpeaking, isSpeaking });
                 }
             };
+            
+            // Stop speaking if the tab changes
+            useEffect(() => {
+                stopSpeaking();
+            }, [activeTab, stopSpeaking]);
+
 
             // Using React.createElement 
             return React.createElement(
@@ -700,6 +874,7 @@
         // Main App Component with Mobile Styling and Layout
         function App() {
             const { db, userId, isAuthReady, isDbConfigured } = useFirebase();
+            const { speakText, isSpeaking, stopSpeaking } = useWebSpeech();
             const [alertMessage, setAlertMessage] = useState(null);
             const [alertType, setAlertType] = useState('info');
 
@@ -713,9 +888,10 @@
             }, []);
             
             // Safety check for substring access: use the full ID if not yet initialized, but display 'Connecting...'
-            const displayUserId = userId 
-                ? `${userId.substring(0, 8)}...` 
-                : 'Connecting...';
+            // Display the full userId if configured, otherwise show a generic message.
+            const displayUserId = isDbConfigured && userId
+                ? userId 
+                : 'Offline/Anonymous';
 
 
             // Using React.createElement 
@@ -744,7 +920,7 @@
                         React.createElement(
                             'span',
                             { className: 'text-xs text-indigo-300 italic' },
-                            'ID: ',
+                            'User ID: ',
                             displayUserId
                         )
                     ),
@@ -755,7 +931,10 @@
                         userId: userId, 
                         isAuthReady: isAuthReady, 
                         showAlert: showAlert,
-                        isDbConfigured: isDbConfigured
+                        isDbConfigured: isDbConfigured,
+                        speakText: speakText,
+                        stopSpeaking: stopSpeaking,
+                        isSpeaking: isSpeaking
                     })
                 )
             );
