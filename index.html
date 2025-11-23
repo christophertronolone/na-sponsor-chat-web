@@ -53,12 +53,13 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         // Utility function for exponential backoff on fetch/Firebase retries
-        const retry = async (fn, retries = 5, delay = 1000) => {
+        const retry = async (fn, retries = 10, delay = 1000) => { // Increased retries for seeding robustness
             for (let i = 0; i < retries; i++) {
                 try {
                     return await fn();
                 } catch (error) {
                     if (i === retries - 1) throw error;
+                    //console.warn(`Retry attempt ${i + 1}/${retries}. Retrying in ${delay * Math.pow(2, i)}ms.`, error.message);
                     await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
                 }
             }
@@ -85,8 +86,6 @@
         ];
         
         // --- 4. Simulated Full Literature Corpus (44 VERY LONG entries) ---
-        // NOTE: This content is a substantial placeholder/mock and must not be used as official NA literature.
-        // Each entry contains repetitive, long text to simulate the huge data size requested by the user.
         
         // Function to generate extremely long placeholder text
         const generateLongText = (topic) => {
@@ -278,49 +277,59 @@
         
         // Custom Hook to Sync Literature Data
         const useLiteratureSync = (db, isDbConfigured, showAlert) => {
-            const [literatureMap, setLiteratureMap] = useState(null); // Key: chapter, Value: array of text chunks
+            const [literatureMap, setLiteratureMap] = useState(null); 
             const [isLiteratureReady, setIsLiteratureReady] = useState(false);
-            const publicCollectionPath = `artifacts/${appId}/public/data/na_literature_6e_full`; // Unique path for the expanded corpus
+            const [isSeeding, setIsSeeding] = useState(false); // New state for seeding status
+            const publicCollectionPath = `artifacts/${appId}/public/data/na_literature_6e_full`; 
 
             useEffect(() => {
                 if (!db || !isDbConfigured) {
                     if (isDbConfigured === false) {
-                        setIsLiteratureReady(true); // Treat as ready but empty if config failed
+                        setIsLiteratureReady(true); 
                     }
                     return;
                 }
                 
                 const literatureRef = collection(db, publicCollectionPath);
                 
-                // 1. Check if collection is empty (Seed if needed)
+                // 1. Check if collection is empty and Seed if needed
                 const seedDatabase = async () => {
+                    setIsSeeding(true); // Start seeding indicator
+                    let shouldSeed = false;
+
                     try {
                         const snapshot = await retry(() => getDocs(literatureRef));
                         
                         if (snapshot.empty || snapshot.docs.length < FULL_LITERATURE_CORPUS.length) {
-                            
-                            // Optimization: Check document count. If fewer than expected, assume re-seeding is needed.
-                            showAlert(`Database update needed. Seeding full corpus of ${FULL_LITERATURE_CORPUS.length} entries (may take a while)...`, 'info');
+                            shouldSeed = true;
                             
                             // Delete existing documents if the count is off (for idempotency)
-                            snapshot.docs.forEach(async (doc) => {
-                                await retry(() => deleteDoc(doc.ref));
-                            });
+                            if (!snapshot.empty) {
+                                for (const doc of snapshot.docs) {
+                                    await retry(() => deleteDoc(doc.ref));
+                                }
+                            }
+                            
+                            showAlert(`Starting initial load of ${FULL_LITERATURE_CORPUS.length} entries. This may take a minute...`, 'info');
                             
                             // Seed the full corpus
                             for (const item of FULL_LITERATURE_CORPUS) {
                                 // Add a unique ID based on book/chapter to ensure we don't accidentally duplicate
                                 await retry(() => addDoc(literatureRef, item));
                             }
-                            showAlert(`Full corpus of ${FULL_LITERATURE_CORPUS.length} entries successfully seeded!`, 'success');
+                            showAlert(`Full corpus successfully loaded!`, 'success');
                         }
                     } catch (error) {
-                        console.error("Error during literature database seeding:", error);
-                        showAlert("Failed to seed literature database. Network or permission error.", 'error');
+                        console.error("Critical Error during literature database seeding:", error);
+                        showAlert(`Failed to seed literature database. Error: ${error.message}. Check network/permissions.`, 'error');
+                        shouldSeed = false; // Stop further attempts if critical error occurs
+                    } finally {
+                        setIsSeeding(false); // Stop seeding indicator
                     }
+                    return shouldSeed;
                 };
                 
-                // 2. Setup Real-time Listener (This runs after seeding completes or if data already exists)
+                // 2. Setup Real-time Listener 
                 const setupListener = () => {
                     const unsubscribe = onSnapshot(literatureRef, (snapshot) => {
                         const allChunks = [];
@@ -344,7 +353,14 @@
                         }
 
                         setLiteratureMap(categorizedMap);
-                        setIsLiteratureReady(true);
+                        // Only set ready once data is received.
+                        if (Object.keys(categorizedMap).length > 0) {
+                            setIsLiteratureReady(true);
+                        } else if (!isSeeding) {
+                            // If not seeding and map is empty, something is wrong or no data exists
+                            setIsLiteratureReady(true); 
+                            showAlert("Database configured, but no literature data was retrieved. Check Firestore rules.", 'error');
+                        }
                     }, (error) => {
                         console.error("Error setting up literature listener:", error);
                         showAlert("Failed to load literature. Real-time updates disabled.", 'error');
@@ -354,12 +370,15 @@
                 };
 
                 // Run seeding check first, then set up the listener
+                let unsubscribeListener;
                 seedDatabase().then(() => {
-                    return setupListener();
+                    // Set up listener regardless of whether seeding happened, 
+                    // as it will pick up existing data or the new data.
+                    unsubscribeListener = setupListener();
                 });
 
                 return () => {
-                    // Cleanup is handled by the inner function scope
+                   if (unsubscribeListener) unsubscribeListener();
                 };
 
             }, [db, isDbConfigured, showAlert, publicCollectionPath]);
@@ -378,7 +397,7 @@
                     bookGroups[book].push({ chapterKey: key, chapterTitle: chapter, order: literatureMap[key][0]?.order || 999 });
                 }
                 
-                // Sort books by defined order
+                // Define the desired order of books
                 const bookOrder = [
                     "Basic Text (6th Edition)", 
                     "It Works: How and Why (Steps)", 
@@ -401,7 +420,7 @@
                 return result;
             }, [literatureMap]);
 
-            return { literatureMap, literatureCategories, isLiteratureReady }; 
+            return { literatureMap, literatureCategories, isLiteratureReady, isSeeding }; 
         }
 
 
@@ -564,7 +583,7 @@
         };
 
         // Component for Navigating the Full Literature
-        const LiteratureSelector = ({ literatureMap, literatureCategories, speakText, stopSpeaking, isSpeaking, isLiteratureReady }) => { 
+        const LiteratureSelector = ({ literatureMap, literatureCategories, speakText, stopSpeaking, isSpeaking, isLiteratureReady, isSeeding }) => { 
             const [selectedKey, setSelectedKey] = useState(null);
             
             // Set initial key once literature is ready
@@ -578,8 +597,18 @@
                 }
             }, [isLiteratureReady, literatureCategories, selectedKey]); 
 
-            if (!isLiteratureReady) {
-                 return React.createElement('div', { className: 'text-center p-8 text-gray-500' }, 'Loading or syncing NA literature from database...');
+            if (!isLiteratureReady || isSeeding) {
+                 return React.createElement(
+                    'div', 
+                    { className: 'text-center p-8 text-gray-500' }, 
+                    isSeeding 
+                        ? React.createElement('div', { className: 'space-y-3' }, 
+                            React.createElement('div', { className: 'animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500 mx-auto' }),
+                            React.createElement('p', { className: 'font-medium text-indigo-600' }, 'INITIALIZING: Seeding full corpus (This may take a minute on first load)...'),
+                            React.createElement('p', { className: 'text-sm' }, 'This is a one-time data load. Thank you for your patience.')
+                        )
+                        : 'Loading NA literature from database...'
+                );
             }
             
             const currentChunks = literatureMap?.[selectedKey] || [];
@@ -646,7 +675,7 @@
         };
 
         // Component for Offline Literature Search
-        const LiteratureSearch = ({ literatureMap, literatureCategories, isLiteratureReady, speakText, stopSpeaking, isSpeaking }) => { 
+        const LiteratureSearch = ({ literatureMap, literatureCategories, isLiteratureReady, speakText, stopSpeaking, isSpeaking, isSeeding }) => { 
             const [query, setQuery] = useState('');
             const [result, setResult] = useState({ title: 'Welcome', content: 'Enter a word or principle (e.g., "amends," "powerless," or "Step 10") to search the embedded literature.' });
             
@@ -730,10 +759,9 @@
                 }
             };
             
-            if (!isLiteratureReady) {
+            if (!isLiteratureReady && !isSeeding) {
                 return React.createElement('div', { className: 'text-center p-8 text-gray-500' }, 'Literature data is loading...');
             }
-
 
             return React.createElement(
                 'div',
@@ -750,13 +778,15 @@
                         value: query,
                         onChange: (e) => setQuery(e.target.value),
                         onKeyPress: handleKeyPress,
-                        className: 'flex-grow p-3 border border-gray-300 rounded-lg focus:border-purple-500 shadow-sm'
+                        disabled: isSeeding,
+                        className: 'flex-grow p-3 border border-gray-300 rounded-lg focus:border-purple-500 shadow-sm disabled:bg-gray-200'
                     }),
                     React.createElement(
                         'button',
                         {
                             onClick: handleSearch,
-                            className: 'bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200'
+                            disabled: isSeeding,
+                            className: 'bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200 disabled:opacity-50'
                         },
                         React.createElement('svg', { className: 'w-5 h-5 inline-block', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
                             React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' })
@@ -787,7 +817,8 @@
                     speakText, 
                     stopSpeaking, 
                     isSpeaking,
-                    isLiteratureReady 
+                    isLiteratureReady,
+                    isSeeding
                 })
             );
         };
@@ -950,7 +981,7 @@
 
 
         // Main App Content Container
-        const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured, speakText, stopSpeaking, isSpeaking, literatureMap, literatureCategories, isLiteratureReady }) => { 
+        const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured, speakText, stopSpeaking, isSpeaking, literatureMap, literatureCategories, isLiteratureReady, isSeeding }) => { 
             const [activeTab, setActiveTab] = useState('daily');
 
             const tabs = [
@@ -968,6 +999,7 @@
                             literatureMap,
                             literatureCategories, 
                             isLiteratureReady,
+                            isSeeding,
                             speakText,
                             stopSpeaking,
                             isSpeaking
@@ -1040,7 +1072,7 @@
             }, []);
             
             // Sync literature data only after DB is configured
-            const { literatureMap, literatureCategories, isLiteratureReady } = useLiteratureSync(db, isDbConfigured, showAlert); 
+            const { literatureMap, literatureCategories, isLiteratureReady, isSeeding } = useLiteratureSync(db, isDbConfigured, showAlert); 
 
 
             const handleAlertClose = useCallback(() => {
@@ -1091,7 +1123,8 @@
                         isSpeaking: isSpeaking,
                         literatureMap: literatureMap,
                         literatureCategories: literatureCategories, 
-                        isLiteratureReady: isLiteratureReady
+                        isLiteratureReady: isLiteratureReady,
+                        isSeeding: isSeeding
                     })
                 )
             );
