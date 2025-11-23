@@ -53,19 +53,19 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         // Utility function for exponential backoff on fetch/Firebase retries
-        const retry = async (fn, retries = 10, delay = 1000) => { // Increased retries for seeding robustness
+        const retry = async (fn, retries = 10, delay = 1000) => { 
             for (let i = 0; i < retries; i++) {
                 try {
                     return await fn();
                 } catch (error) {
                     if (i === retries - 1) throw error;
-                    //console.warn(`Retry attempt ${i + 1}/${retries}. Retrying in ${delay * Math.pow(2, i)}ms.`, error.message);
+                    // Exponential backoff logic
                     await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)));
                 }
             }
         };
 
-        // --- 3. Embedded Daily Readings (Not part of the large corpus load) ---
+        // --- 3. Embedded Daily Readings ---
 
         const dailyReflections = [
             "JFT: Our common welfare should come first; personal recovery depends on NA unity and focusing on the group's primary purpose.",
@@ -230,13 +230,15 @@
                 }
                 
                 setLogLevel('debug');
-                setIsDbConfigured(true);
 
                 const setupFirebase = async () => {
                     try {
                         const app = initializeApp(firebaseConfig);
                         const firestore = getFirestore(app);
                         const firebaseAuth = getAuth(app);
+                        
+                        // DB Connection established, set configured to true
+                        setIsDbConfigured(true); 
                         setDb(firestore);
                         
                         await setPersistence(firebaseAuth, browserSessionPersistence);
@@ -255,7 +257,7 @@
                                 } catch (error) {
                                     console.error("Firebase Auth failed, using random ID for non-persistent access:", error);
                                     setUserId(crypto.randomUUID()); 
-                                    setIsDbConfigured(false); 
+                                    // Do NOT set isDbConfigured to false here, as the DB object is valid.
                                 }
                             }
                             setIsAuthReady(true);
@@ -265,7 +267,7 @@
                     } catch (e) {
                         console.error("Error initializing Firebase services:", e);
                         setIsAuthReady(true);
-                        setIsDbConfigured(false);
+                        setIsDbConfigured(false); // Only set false if init fails
                     }
                 };
 
@@ -279,25 +281,31 @@
         const useLiteratureSync = (db, isDbConfigured, showAlert) => {
             const [literatureMap, setLiteratureMap] = useState(null); 
             const [isLiteratureReady, setIsLiteratureReady] = useState(false);
-            const [isSeeding, setIsSeeding] = useState(false); // New state for seeding status
+            const [isSeeding, setIsSeeding] = useState(false); 
+            // NEW: State to explicitly track if literature data load failed
+            const [literatureLoadFailed, setLiteratureLoadFailed] = useState(false); 
+            
             const publicCollectionPath = `artifacts/${appId}/public/data/na_literature_6e_full`; 
 
             useEffect(() => {
                 if (!db || !isDbConfigured) {
                     if (isDbConfigured === false) {
                         setIsLiteratureReady(true); 
+                        setLiteratureLoadFailed(true); // Fail immediately if DB config failed
                     }
                     return;
                 }
                 
+                setLiteratureLoadFailed(false); // Clear failure state on new attempt
                 const literatureRef = collection(db, publicCollectionPath);
                 
                 // 1. Check if collection is empty and Seed if needed
                 const seedDatabase = async () => {
-                    setIsSeeding(true); // Start seeding indicator
+                    setIsSeeding(true); 
                     let shouldSeed = false;
 
                     try {
+                        // Check if documents exist in the collection
                         const snapshot = await retry(() => getDocs(literatureRef));
                         
                         if (snapshot.empty || snapshot.docs.length < FULL_LITERATURE_CORPUS.length) {
@@ -314,7 +322,6 @@
                             
                             // Seed the full corpus
                             for (const item of FULL_LITERATURE_CORPUS) {
-                                // Add a unique ID based on book/chapter to ensure we don't accidentally duplicate
                                 await retry(() => addDoc(literatureRef, item));
                             }
                             showAlert(`Full corpus successfully loaded!`, 'success');
@@ -322,9 +329,10 @@
                     } catch (error) {
                         console.error("Critical Error during literature database seeding:", error);
                         showAlert(`Failed to seed literature database. Error: ${error.message}. Check network/permissions.`, 'error');
-                        shouldSeed = false; // Stop further attempts if critical error occurs
+                        setLiteratureLoadFailed(true); // Set failure on seeding error
+                        shouldSeed = false; 
                     } finally {
-                        setIsSeeding(false); // Stop seeding indicator
+                        setIsSeeding(false); 
                     }
                     return shouldSeed;
                 };
@@ -337,7 +345,6 @@
                             allChunks.push({ id: doc.id, ...doc.data() });
                         });
                         
-                        // Process chunks into a categorized map for the UI
                         const categorizedMap = allChunks.reduce((acc, chunk) => {
                             const key = `${chunk.book}: ${chunk.chapter}`;
                             if (!acc[key]) {
@@ -347,33 +354,32 @@
                             return acc;
                         }, {});
 
-                        // Sort chunks within each chapter by their order field
                         for (const key in categorizedMap) {
                             categorizedMap[key].sort((a, b) => a.order - b.order);
                         }
 
                         setLiteratureMap(categorizedMap);
-                        // Only set ready once data is received.
                         if (Object.keys(categorizedMap).length > 0) {
                             setIsLiteratureReady(true);
+                            setLiteratureLoadFailed(false); // Clear failure on successful read
                         } else if (!isSeeding) {
-                            // If not seeding and map is empty, something is wrong or no data exists
+                            // If map is empty and we are not currently seeding, assume failure or lack of data
                             setIsLiteratureReady(true); 
+                            setLiteratureLoadFailed(true); 
                             showAlert("Database configured, but no literature data was retrieved. Check Firestore rules.", 'error');
                         }
                     }, (error) => {
                         console.error("Error setting up literature listener:", error);
                         showAlert("Failed to load literature. Real-time updates disabled.", 'error');
                         setIsLiteratureReady(true);
+                        setLiteratureLoadFailed(true); // Set failure state on listener error
                     });
                     return unsubscribe;
                 };
 
-                // Run seeding check first, then set up the listener
                 let unsubscribeListener;
+                // Run seeding check first, then set up the listener
                 seedDatabase().then(() => {
-                    // Set up listener regardless of whether seeding happened, 
-                    // as it will pick up existing data or the new data.
                     unsubscribeListener = setupListener();
                 });
 
@@ -387,7 +393,6 @@
             const literatureCategories = useMemo(() => { 
                 if (!literatureMap) return [];
                 
-                // Group by Book title first
                 const bookGroups = {};
                 for (const key in literatureMap) {
                     const [book, chapter] = key.split(': ');
@@ -397,7 +402,6 @@
                     bookGroups[book].push({ chapterKey: key, chapterTitle: chapter, order: literatureMap[key][0]?.order || 999 });
                 }
                 
-                // Define the desired order of books
                 const bookOrder = [
                     "Basic Text (6th Edition)", 
                     "It Works: How and Why (Steps)", 
@@ -408,7 +412,6 @@
                 const result = [];
                 bookOrder.forEach(bookTitle => {
                     if (bookGroups[bookTitle]) {
-                        // Sort chapters within books by their 'order' field
                         bookGroups[bookTitle].sort((a, b) => a.order - b.order);
                         result.push({ 
                             label: `--- ${bookTitle} ---`, 
@@ -420,7 +423,7 @@
                 return result;
             }, [literatureMap]);
 
-            return { literatureMap, literatureCategories, isLiteratureReady, isSeeding }; 
+            return { literatureMap, literatureCategories, isLiteratureReady, isSeeding, literatureLoadFailed }; 
         }
 
 
@@ -583,13 +586,12 @@
         };
 
         // Component for Navigating the Full Literature
-        const LiteratureSelector = ({ literatureMap, literatureCategories, speakText, stopSpeaking, isSpeaking, isLiteratureReady, isSeeding }) => { 
+        const LiteratureSelector = ({ literatureMap, literatureCategories, speakText, stopSpeaking, isSpeaking, isLiteratureReady, isSeeding, literatureLoadFailed }) => { 
             const [selectedKey, setSelectedKey] = useState(null);
             
             // Set initial key once literature is ready
             useEffect(() => {
                 if (isLiteratureReady && !selectedKey && literatureCategories.length > 0) { 
-                    // Find the first actual chapter key (not a section label)
                     const firstKey = literatureCategories.find(section => section.keys.length > 0)?.keys[0]; 
                     if (firstKey) {
                          setSelectedKey(firstKey);
@@ -611,14 +613,20 @@
                 );
             }
             
+            // Check for explicit loading failure or empty result
+            if (literatureLoadFailed || literatureCategories.length === 0) { 
+                return React.createElement('div', { className: 'text-center p-6 text-red-700 font-semibold bg-red-100 rounded-xl border-2 border-red-300' }, 
+                    'No literature found or database connection failed.',
+                    React.createElement('br'),
+                    'Cannot display reference material.'
+                );
+            }
+
+
             const currentChunks = literatureMap?.[selectedKey] || [];
             const currentContent = currentChunks.map(c => c.text).join('\n\n');
             const contentToSpeak = `${selectedKey}. ${currentContent}`;
             
-            if (literatureCategories.length === 0) { 
-                return React.createElement('div', { className: 'text-center p-8 text-red-500 font-medium bg-red-100 rounded-xl' }, 'No literature found or database connection failed. Cannot display reference material.');
-            }
-
 
             return React.createElement(
                 'div',
@@ -675,7 +683,7 @@
         };
 
         // Component for Offline Literature Search
-        const LiteratureSearch = ({ literatureMap, literatureCategories, isLiteratureReady, speakText, stopSpeaking, isSpeaking, isSeeding }) => { 
+        const LiteratureSearch = ({ literatureMap, literatureCategories, isLiteratureReady, speakText, stopSpeaking, isSpeaking, isSeeding, literatureLoadFailed }) => { 
             const [query, setQuery] = useState('');
             const [result, setResult] = useState({ title: 'Welcome', content: 'Enter a word or principle (e.g., "amends," "powerless," or "Step 10") to search the embedded literature.' });
             
@@ -778,14 +786,14 @@
                         value: query,
                         onChange: (e) => setQuery(e.target.value),
                         onKeyPress: handleKeyPress,
-                        disabled: isSeeding,
+                        disabled: isSeeding || literatureLoadFailed,
                         className: 'flex-grow p-3 border border-gray-300 rounded-lg focus:border-purple-500 shadow-sm disabled:bg-gray-200'
                     }),
                     React.createElement(
                         'button',
                         {
                             onClick: handleSearch,
-                            disabled: isSeeding,
+                            disabled: isSeeding || literatureLoadFailed,
                             className: 'bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200 disabled:opacity-50'
                         },
                         React.createElement('svg', { className: 'w-5 h-5 inline-block', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
@@ -818,7 +826,8 @@
                     stopSpeaking, 
                     isSpeaking,
                     isLiteratureReady,
-                    isSeeding
+                    isSeeding,
+                    literatureLoadFailed
                 })
             );
         };
@@ -981,7 +990,7 @@
 
 
         // Main App Content Container
-        const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured, speakText, stopSpeaking, isSpeaking, literatureMap, literatureCategories, isLiteratureReady, isSeeding }) => { 
+        const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured, speakText, stopSpeaking, isSpeaking, literatureMap, literatureCategories, isLiteratureReady, isSeeding, literatureLoadFailed }) => { 
             const [activeTab, setActiveTab] = useState('daily');
 
             const tabs = [
@@ -1000,6 +1009,7 @@
                             literatureCategories, 
                             isLiteratureReady,
                             isSeeding,
+                            literatureLoadFailed,
                             speakText,
                             stopSpeaking,
                             isSpeaking
@@ -1072,7 +1082,7 @@
             }, []);
             
             // Sync literature data only after DB is configured
-            const { literatureMap, literatureCategories, isLiteratureReady, isSeeding } = useLiteratureSync(db, isDbConfigured, showAlert); 
+            const { literatureMap, literatureCategories, isLiteratureReady, isSeeding, literatureLoadFailed } = useLiteratureSync(db, isDbConfigured, showAlert); 
 
 
             const handleAlertClose = useCallback(() => {
@@ -1124,7 +1134,8 @@
                         literatureMap: literatureMap,
                         literatureCategories: literatureCategories, 
                         isLiteratureReady: isLiteratureReady,
-                        isSeeding: isSeeding
+                        isSeeding: isSeeding,
+                        literatureLoadFailed: literatureLoadFailed
                     })
                 )
             );
