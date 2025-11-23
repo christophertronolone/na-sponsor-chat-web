@@ -21,11 +21,11 @@
         }
         /* Custom scrollbar for better mobile/desktop appearance */
         .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
+            width: 6px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-            background-color: rgba(0, 0, 0, 0.2);
-            border-radius: 2px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
         }
     </style>
 </head>
@@ -35,8 +35,7 @@
 
     <script type="module">
         // --- 1. React Hook Definitions (Accessed from global React object) ---
-        // We extract hooks from the globally loaded React object
-        const { useState, useEffect, useCallback, useMemo } = React;
+        const { useState, useEffect, useCallback, useMemo, useRef } = React;
         
         // Firebase ES Module Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -50,7 +49,6 @@
             apiKey: "PLACEHOLDER_KEY",
             projectId: "PLACEHOLDER_ID",
         };
-        // Corrected initialization to avoid ReferenceError
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
@@ -66,7 +64,7 @@
             }
         };
 
-        // --- 3. Embedded Literature Data (Daily Readings only) ---
+        // --- 3. Embedded Daily Readings (Not part of the large corpus load) ---
 
         const dailyReflections = [
             "JFT: Our common welfare should come first; personal recovery depends on NA unity and focusing on the group's primary purpose.",
@@ -86,26 +84,50 @@
             "Today's Meditation: Service is the backbone of the program. What act of selfless service can I perform for another addict today?",
         ];
         
-        // --- 4. Mock Literature Corpus for Database Seeding (Substantial Placeholder Content) ---
+        // --- 4. Simulated Full Literature Corpus (44 VERY LONG entries) ---
         // NOTE: This content is a substantial placeholder/mock and must not be used as official NA literature.
-        // The text is significantly longer to simulate a full corpus as requested.
+        // Each entry contains repetitive, long text to simulate the huge data size requested by the user.
+        
+        // Function to generate extremely long placeholder text
+        const generateLongText = (topic) => {
+            const baseSentence = `This section deeply explores the principle of ${topic}, emphasizing the profound spiritual changes necessary for sustained recovery. The journey begins with deep personal honesty and commitment. We must rigorously examine our past actions and current motivations, always seeking growth and self-improvement. The application of this principle transforms our lives, moving us from the self-centered chaos of addiction to a life of service, serenity, and purpose. This change requires daily diligence, constant self-inventory, and a willingness to accept life on its own terms. Recovery is not a destination, but a continuing process of spiritual unfolding. This detailed passage serves to guide the member through every facet of this crucial step/tradition, ensuring a comprehensive understanding of its vital role in maintaining a clean and fulfilling life. We repeat these principles until they become second nature, securing our spiritual foundation against the struggles of daily living. The path is clear, and the power is available through the fellowship and our Higher Power. `;
+            return Array(20).fill(baseSentence).join(' '); // Repeat the base sentence 20 times for maximum length simulation
+        };
+
         const FULL_LITERATURE_CORPUS = [
-            // --- BASIC TEXT (6TH EDITION) MOCK - EXPANDED ---
-            { book: "Basic Text (6th Edition)", chapter: "Chapter 1: Who Is An Addict?", order: 1, text: "The first truth we confront in Narcotics Anonymous is the simple, undeniable fact of our addiction. We had reached a point where our lives had become centered entirely around the pursuit and use of drugs, or the recovery from their effects. This disease is progressive, chronic, and ultimately fatal if left untreated. We learned that willpower, no matter how strong, was insufficient to stop the cycle. The obsession to use and the compulsion to continue, even in the face of devastating consequences, proved that we were entirely powerless over our addiction. Our lives, as a result, had become unmanageable, a chaos of broken promises, financial ruin, emotional despair, and spiritual bankruptcy. This realization is not a sign of weakness, but the first step toward true strength. It is the admission of defeat that allows us to find a new way to live. This chapter explores the depth of that admission, detailing the subtle ways the disease manifests not just in the act of using, but in our character defects, our self-centeredness, and our attempts to control the uncontrollable world around us. We share our experiences, strength, and hope so that the newcomer may recognize themselves in our stories and take that first, crucial step toward recovery. Understanding that we suffer from a disease, not a moral failing, is the key that unlocks the door to the remaining eleven steps. The journey begins with this profound acceptance." },
-            
-            { book: "Basic Text (6th Edition)", chapter: "Chapter 4: We Do Recover", order: 2, text: "Recovery is not merely the cessation of drug use; it is a profound change in attitude, perspective, and, most importantly, behavior. In this chapter, we celebrate the reality that recovery is possible for any addict, regardless of their past or the severity of their addiction. We found a new freedom that we never thought possible—freedom from the bondage of self, from the obsession to use, and from the constant fear that dominated our lives. This new life is built on spiritual principles that we practice daily, not perfectly. We share stories of members who have rebuilt their families, careers, and self-respect, demonstrating that the wreckage of our past can be transformed into a foundation for a beautiful future. The steps provide the framework, the fellowship provides the support, and our Higher Power provides the strength. We emphasize the necessity of commitment and continuous effort. The benefits of recovery are tangible: we can look others in the eye, we can handle life on life’s terms, and we find a peace that surpasses understanding. This section stands as a testament to the power of the program and encourages the addict still suffering to believe that they too can find a new way to live, clean and sober, one day at a time. The miracles of recovery are happening all around us, and this chapter illuminates the path to experiencing them personally." },
-            
-            { book: "Basic Text (6th Edition)", chapter: "Chapter 5: How It Works", order: 3, text: "The core of our program is the Twelve Steps, a clear-cut design for living that works. Step One, our foundation, is the admission of powerlessness. Step Two introduces hope: the belief that a Power greater than ourselves can restore us to sanity. This Higher Power can be anything we choose—the group, nature, or a traditional concept of God—provided it is loving and capable of helping us. The critical aspect is the willingness to believe, setting aside our self-will and the intellectual barriers that once kept us isolated. Step Three is the decision: turning our will and our lives over to the care of God as we understood Him. This is not passive resignation, but an active surrender, a willingness to follow the principles of the program rather than the destructive dictates of our disease. This chapter provides detailed guidance on how to practically apply these first three steps, emphasizing that the program is one of action. We cannot think ourselves into a new way of acting; we must act ourselves into a new way of thinking. This process requires honesty, open-mindedness, and willingness, the three critical elements for success in Narcotics Anonymous. By committing to these steps, we initiate a spiritual transformation that begins to dismantle the isolation and despair of addiction, replacing them with connection and purpose." },
+            // --- Basic Text (6th Edition) - 8 Chapters ---
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 1: Who Is An Addict?", order: 1, text: generateLongText("addiction and powerlessness") },
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 2: What Is The NA Program?", order: 2, text: generateLongText("the solution offered by Narcotics Anonymous") },
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 3: Why Are We Here?", order: 3, text: generateLongText("the goal of finding freedom from active addiction") },
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 4: We Do Recover", order: 4, text: generateLongText("the reality and miracle of sustained recovery") },
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 5: How It Works (Steps 1-3)", order: 5, text: generateLongText("the foundation of acceptance, hope, and surrender") },
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 6: Just For Today", order: 6, text: generateLongText("living in the moment and applying principles daily") },
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 7: The Twelve Traditions", order: 7, text: generateLongText("the spiritual principles for group unity and function") },
+            { book: "Basic Text (6th Edition)", chapter: "Chapter 8: Service", order: 8, text: generateLongText("the selfless giving required to keep the program strong") },
 
-            // --- IT WORKS: HOW AND WHY MOCK - EXPANDED ---
-            { book: "It Works: How and Why", chapter: "Step 4: The Inventory Process", order: 4, text: "The Fourth Step, 'Made a searching and fearless moral inventory of ourselves,' is often referred to as the process of cleaning house. It requires us to shine a light into the darkest corners of our past and present character. We systematically examine the roots of our resentments, fears, and sexual conduct, recognizing that these elements are often interconnected and driven by self-centeredness. The searching part means leaving no stone unturned; the fearless part means setting aside the ego-driven resistance that tells us we are too good or too bad to look. We use a structured format, typically writing out each resentment, identifying who or what we are angry at, the cause, how it affected our self-esteem, security, and sex relations, and, most crucially, the part of the situation that was ours. This is where the moral aspect comes in—we are looking for the defects of character that led to our destructive reactions. This rigorous self-examination is painful but necessary, as the purpose is not to wallow in guilt, but to identify the patterns and defects that must be removed. By putting these facts on paper, we gain clarity and detach ourselves from the overwhelming emotional weight of our history, preparing us for the next steps of confession and removal." },
-            
-            { book: "It Works: How and Why", chapter: "Tradition 1: The Principle of Unity", order: 5, text: "Our First Tradition states: 'Our common welfare should come first; personal recovery depends on NA unity.' This principle underscores that the survival of Narcotics Anonymous as a whole must be our primary concern, because without the fellowship, the individual cannot maintain recovery. This tradition is a powerful counterpoint to the self-centered nature of our addiction. It demands we subordinate our personal desires, opinions, and even legitimate concerns when they threaten the harmony and purpose of the group. Unity means that we focus relentlessly on our primary purpose: to carry the message to the addict who still suffers. When groups, areas, or regions become entangled in secondary issues—disputes over funds, facility rules, or personality clashes—the message is obscured, and the addict seeking help may turn away. This chapter explores the spiritual dimensions of unity, demonstrating that it requires humility, tolerance, and respect. We learn to compromise and seek consensus, recognizing that the collective wisdom of the group is far greater than the singular opinion of any one member. Practicing this tradition ensures that the doors of NA remain open for all who seek recovery." },
+            // --- It Works: How and Why (12 Steps) - 12 Entries ---
+            ...Array.from({ length: 12 }, (_, i) => ({
+                book: "It Works: How and Why (Steps)",
+                chapter: `Step ${i + 1}: ${['Powerlessness', 'Hope', 'Surrender', 'Inventory', 'Admission', 'Readiness', 'Humble Request', 'Amends List', 'Amends Made', 'Continued Inventory', 'Prayer/Meditation', 'Spiritual Awakening'][i]}`,
+                order: i + 1,
+                text: generateLongText(`Step ${i + 1}: The importance of the principle of ${['acceptance', 'faith', 'will', 'honesty', 'confession', 'willingness', 'humility', 'forgiveness', 'making right', 'diligence', 'conscious contact', 'carrying the message'][i]}`)
+            })),
 
-            // --- NA STEP WORKING GUIDE MOCK - EXPANDED ---
-            { book: "NA Step Working Guide", chapter: "Step 10: Continuing Inventory and Maintenance", order: 6, text: "Step Ten, 'Continued to take personal inventory and when we were wrong promptly admitted it,' is the maintenance step that keeps our spiritual condition stable. After the thorough housecleaning of Steps Four through Nine, Step Ten prevents us from accumulating the spiritual debris that characterized our active addiction. It is a daily, sometimes moment-to-moment, application of program principles. The first part is the continuing inventory, which involves a conscious, regular assessment of our motives, feelings, and actions. This inventory is brief and focused, unlike the extensive Fourth Step. We ask ourselves: What am I feeling? What am I doing? What is my motivation? Am I acting on fear or principle? If we identify a developing resentment, fear, or self-pity, the second part of the step requires prompt admission. This admission is made to ourselves, to our Higher Power, and to another person (such as a sponsor or trusted friend). Promptness is key, as the disease thrives in secrecy and delay. By keeping our side of the street clean through daily inventory and admission, we interrupt the cycle of obsession and compulsion before it gains momentum, allowing us to maintain the spiritual awakening we received and live constructively in the present moment." },
+            // --- It Works: How and Why (12 Traditions) - 12 Entries ---
+            ...Array.from({ length: 12 }, (_, i) => ({
+                book: "It Works: How and Why (Traditions)",
+                chapter: `Tradition ${i + 1}: ${['Unity', 'Authority', 'Money', 'Autonomy', 'Purpose', 'Endorsements', 'Self-Support', 'Professionalism', 'Non-Affiliation', 'Opinion', 'Public Relations', 'Anonymity'][i]}`,
+                order: i + 1,
+                text: generateLongText(`Tradition ${i + 1}: The collective guidance on the principle of ${['common welfare', 'ultimate authority', 'finances', 'group independence', 'primary purpose', 'outside issues', 'non-profit operation', 'service without compulsion', 'no opinion on outside controversy', 'attraction not promotion', 'spiritual foundation'][i]}`)
+            })),
             
-            { book: "NA Step Working Guide", chapter: "Step 11: Prayer and Meditation", order: 7, text: "Step Eleven, 'Sought through prayer and meditation to improve our conscious contact with God as we understood Him, praying only for knowledge of His will for us and the power to carry that out,' is our direct link to a spiritual resource. This chapter provides practical ways to cultivate a deeper relationship with our Higher Power. Prayer is viewed as talking to God; meditation is listening. We emphasize that conscious contact is not achieved by chance, but through dedicated, consistent practice. We explore various forms of prayer, including prayers of petition, gratitude, and surrender. The focus of our prayer shifts from asking for things we want (which often led to unmanageability) to asking only for the knowledge of God’s will for us and the ability to execute it. Meditation involves quiet reflection, allowing us to receive guidance and clarity. It helps us to quiet the internal noise and find serenity, connecting us to the source of our recovery. This step is designed to strengthen our spiritual anchor, providing the guidance and fortitude necessary to face life's challenges without resorting to old behaviors, ensuring that our spiritual awakening continues to grow." },
+            // --- NA Step Working Guide - 12 Steps ---
+            ...Array.from({ length: 12 }, (_, i) => ({
+                book: "NA Step Working Guide",
+                chapter: `Working Step ${i + 1}`,
+                order: i + 1,
+                text: generateLongText(`Step ${i + 1} application: The practical, detailed method of applying the principles of ${['admission', 'faith', 'commitment', 'self-examination', 'sharing', 'change', 'asking', 'preparation', 'direct action', 'maintenance', 'spiritual connection', 'sharing the gifts'][i]}`)
+            })),
         ];
 
 
@@ -115,6 +137,7 @@
         const useWebSpeech = () => {
             const [isSpeaking, setIsSpeaking] = useState(false);
             const [preferredVoice, setPreferredVoice] = useState(null);
+            const speechRef = useRef(null);
 
             // 1. Load voices once and on change
             useEffect(() => {
@@ -154,6 +177,7 @@
                 if (!text) return;
 
                 const utterance = new SpeechSynthesisUtterance(text);
+                speechRef.current = utterance;
                 
                 if (preferredVoice) {
                     utterance.voice = preferredVoice;
@@ -256,7 +280,7 @@
         const useLiteratureSync = (db, isDbConfigured, showAlert) => {
             const [literatureMap, setLiteratureMap] = useState(null); // Key: chapter, Value: array of text chunks
             const [isLiteratureReady, setIsLiteratureReady] = useState(false);
-            const publicCollectionPath = `artifacts/${appId}/public/data/na_literature_6e`;
+            const publicCollectionPath = `artifacts/${appId}/public/data/na_literature_6e_full`; // Unique path for the expanded corpus
 
             useEffect(() => {
                 if (!db || !isDbConfigured) {
@@ -273,15 +297,22 @@
                     try {
                         const snapshot = await retry(() => getDocs(literatureRef));
                         
-                        if (snapshot.empty) {
-                            showAlert("Database is empty. Seeding full NA literature corpus (may take a moment)...", 'info');
+                        if (snapshot.empty || snapshot.docs.length < FULL_LITERATURE_CORPUS.length) {
                             
-                            // Batch writes would be better, but we use simple addDoc loop for simplicity in a single file
+                            // Optimization: Check document count. If fewer than expected, assume re-seeding is needed.
+                            showAlert(`Database update needed. Seeding full corpus of ${FULL_LITERATURE_CORPUS.length} entries (may take a while)...`, 'info');
+                            
+                            // Delete existing documents if the count is off (for idempotency)
+                            snapshot.docs.forEach(async (doc) => {
+                                await retry(() => deleteDoc(doc.ref));
+                            });
+                            
+                            // Seed the full corpus
                             for (const item of FULL_LITERATURE_CORPUS) {
                                 // Add a unique ID based on book/chapter to ensure we don't accidentally duplicate
                                 await retry(() => addDoc(literatureRef, item));
                             }
-                            showAlert("Full literature corpus successfully seeded!", 'success');
+                            showAlert(`Full corpus of ${FULL_LITERATURE_CORPUS.length} entries successfully seeded!`, 'success');
                         }
                     } catch (error) {
                         console.error("Error during literature database seeding:", error);
@@ -344,17 +375,22 @@
                     if (!bookGroups[book]) {
                         bookGroups[book] = [];
                     }
-                    bookGroups[book].push({ chapterKey: key, chapterTitle: chapter });
+                    bookGroups[book].push({ chapterKey: key, chapterTitle: chapter, order: literatureMap[key][0]?.order || 999 });
                 }
                 
-                // Sort chapters within books and organize into a list
-                const result = [];
-                const bookOrder = ["Basic Text (6th Edition)", "It Works: How and Why", "NA Step Working Guide"];
+                // Sort books by defined order
+                const bookOrder = [
+                    "Basic Text (6th Edition)", 
+                    "It Works: How and Why (Steps)", 
+                    "It Works: How and Why (Traditions)", 
+                    "NA Step Working Guide"
+                ];
 
+                const result = [];
                 bookOrder.forEach(bookTitle => {
                     if (bookGroups[bookTitle]) {
-                        // Sort chapters (simple alpha sort, or numerical if the format allows)
-                        bookGroups[bookTitle].sort((a, b) => a.chapterTitle.localeCompare(b.chapterTitle));
+                        // Sort chapters within books by their 'order' field
+                        bookGroups[bookTitle].sort((a, b) => a.order - b.order);
                         result.push({ 
                             label: `--- ${bookTitle} ---`, 
                             keys: bookGroups[bookTitle].map(item => item.chapterKey) 
@@ -558,7 +594,7 @@
             return React.createElement(
                 'div',
                 { className: 'space-y-4 pt-4 border-t border-gray-200' },
-                React.createElement('h3', { className: 'text-xl font-bold text-gray-700' }, 'Full Literature Reference'),
+                React.createElement('h3', { className: 'text-xl font-bold text-gray-700' }, 'Full Literature Reference (Simulated)'),
                 
                 React.createElement(
                     'select',
@@ -653,7 +689,7 @@
                             
                             // Extract a snippet for context
                             const matchIndex = lowerContent.indexOf(lowerQuery);
-                            const contextWindow = 200; // Increased context window for longer text
+                            const contextWindow = 200; // Context window size
                             const startIndex = Math.max(0, matchIndex - contextWindow); 
                             const endIndex = Math.min(item.text.length, matchIndex + lowerQuery.length + contextWindow);
                             
@@ -703,7 +739,7 @@
                 'div',
                 { className: 'space-y-4' },
                 React.createElement('h2', { className: 'text-2xl font-extrabold text-purple-700 text-center border-b pb-3' }, 'Literature Search'),
-                React.createElement('p', { className: 'text-sm text-gray-500 text-center' }, 'Searching the Basic Text, It Works, and Step Working Guide (Full Mock Content).'),
+                React.createElement('p', { className: 'text-sm text-gray-500 text-center' }, 'Searching Basic Text, It Works, and Step Working Guide (Full Simulated Content).'),
 
                 React.createElement(
                     'div',
@@ -816,6 +852,7 @@
             const handleDeleteEntry = async (id) => {
                 if (!db || !isDbConfigured) return;
                 
+                // Using window.confirm() here as a controlled exception for in-iframe deletion prompt
                 if (!window.confirm("Are you sure you want to delete this log entry?")) {
                     return;
                 }
