@@ -515,7 +515,7 @@
             return React.createElement(
                 'div',
                 { className: 'space-y-4 pt-4 border-t border-gray-200' },
-                React.createElement('h3', { className: 'text-xl font-bold text-gray-700' }, 'Full Literature Reference (Simulated)'),
+                React.createElement('h3', { className: 'text-xl font-bold text-gray-700' }, 'Full Chapter Selector'),
                 
                 React.createElement(
                     'select',
@@ -596,53 +596,58 @@
                      return { title: "Search Query Too Short", content: "Please enter a word or phrase with at least 3 letters to search the embedded literature." };
                 }
                 
-                let bestMatch = null;
+                let bestTitleMatch = null;
+                let bestContentMatch = null;
                 let highestCount = 0;
 
                 for (const item of searchableCorpus) {
+                    const lowerTitle = item.title.toLowerCase();
                     const lowerContent = item.text.toLowerCase();
-
-                    // Check if the query is in the chapter title or the text content
-                    const isTitleMatch = item.title.toLowerCase().includes(lowerQuery);
-                    const isContentMatch = lowerContent.includes(lowerQuery);
                     
-                    if (isTitleMatch || isContentMatch) {
-                        const count = (lowerContent.match(new RegExp(lowerQuery, 'g')) || []).length;
+                    const isTitleMatch = lowerTitle.includes(lowerQuery);
+                    const count = (lowerContent.match(new RegExp(lowerQuery, 'g')) || []).length;
+                    
+                    // 1. Prioritize an exact or clear title match
+                    if (isTitleMatch) {
+                        // If we find any title match, immediately set it as the best title match. 
+                        // We will return this if no strong content match is found.
+                        bestTitleMatch = {
+                            title: `Match in Title: ${item.title}`, 
+                            content: `The term "${searchQuery}" matched the chapter title. Reading the full chapter content below.` 
+                        };
+                    }
+                    
+                    // 2. Track the best content match by count
+                    if (count > highestCount) {
+                        highestCount = count;
                         
-                        // Prioritize title matches if no content matches have been found yet
-                        if (isTitleMatch && !isContentMatch && highestCount === 0) {
-                             bestMatch = { 
-                                title: `Match in Title: ${item.title}`, 
-                                content: `The term "${searchQuery}" matched the chapter title. Reading the full chapter content below.` 
-                            };
-                            highestCount = 1; // Arbitrary high count for title match
-                            break; 
-                        }
+                        // Extract a snippet for context
+                        const matchIndex = lowerContent.indexOf(lowerQuery);
+                        const contextWindow = 200; // Context window size
+                        const startIndex = Math.max(0, matchIndex - contextWindow); 
+                        const endIndex = Math.min(item.text.length, matchIndex + lowerQuery.length + contextWindow);
+                        
+                        let snippet = item.text.substring(startIndex, endIndex).trim();
+                        
+                        if (startIndex > 0) snippet = '... ' + snippet;
+                        if (endIndex < item.text.length) snippet = snippet + ' ...';
 
-                        if (count > highestCount || !bestMatch) {
-                            highestCount = count;
-                            
-                            // Extract a snippet for context
-                            const matchIndex = lowerContent.indexOf(lowerQuery);
-                            const contextWindow = 200; // Context window size
-                            const startIndex = Math.max(0, matchIndex - contextWindow); 
-                            const endIndex = Math.min(item.text.length, matchIndex + lowerQuery.length + contextWindow);
-                            
-                            let snippet = item.text.substring(startIndex, endIndex).trim();
-                            
-                            if (startIndex > 0) snippet = '... ' + snippet;
-                            if (endIndex < item.text.length) snippet = snippet + ' ...';
-
-                            bestMatch = { 
-                                title: `Excerpt from: ${item.title} (Matches: ${count})`, 
-                                content: `"${snippet}"\n\n(Found using the term: "${searchQuery}")` 
-                            };
-                        }
+                        bestContentMatch = { 
+                            title: `Excerpt from: ${item.title} (Matches: ${count})`, 
+                            content: `"${snippet}"\n\n(Found using the term: "${searchQuery}")` 
+                        };
                     }
                 }
-
-                if (bestMatch) {
-                    return bestMatch;
+                
+                // Final Decision: 
+                // 1. If we have a strong content match (highestCount > 0), return it.
+                // 2. Otherwise, return the best title match if one exists.
+                // 3. Otherwise, report no match.
+                
+                if (bestContentMatch) {
+                    return bestContentMatch;
+                } else if (bestTitleMatch) {
+                    return bestTitleMatch;
                 }
 
                 return { 
@@ -883,7 +888,7 @@
         // Main App Content Container
         const AppContent = ({ db, userId, isAuthReady, showAlert, isDbConfigured, speakText, stopSpeaking, isSpeaking }) => { 
             const [activeTab, setActiveTab] = useState('daily');
-
+            
             const tabs = [
                 { id: 'daily', name: 'Guidance', icon: (color) => React.createElement('svg', { className: `w-6 h-6 ${color}`, fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M8 7v10l9 3 9-3V7l-9-3-9 3z' })) },
                 { id: 'search', name: 'Reference', icon: (color) => React.createElement('svg', { className: `w-6 h-6 ${color}`, fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: '2', d: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' })) },
@@ -895,7 +900,6 @@
                     case 'daily':
                         return React.createElement(DailyReadings, { speakText, stopSpeaking, isSpeaking });
                     case 'search':
-                        // Use the globally available, embedded literature data
                         return React.createElement(LiteratureSearch, {
                             literatureMap: LITERATURE_MAP,
                             literatureCategories: LITERATURE_CATEGORIES, 
